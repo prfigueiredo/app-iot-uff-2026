@@ -4,6 +4,8 @@ class Alerta {
   final String descricao;
   final String severidade; // alta | media | baixa
   final String canal; // sms | email | push
+  // temperatura | umidade | ar_desligado | sem_comunicacao, or null for manual alerts.
+  final String? condicao;
   final DateTime data;
   final bool lido;
 
@@ -13,21 +15,34 @@ class Alerta {
     required this.descricao,
     required this.severidade,
     required this.canal,
+    this.condicao,
     required this.data,
     required this.lido,
   });
 
   factory Alerta.fromJson(Map<String, dynamic> json) {
     return Alerta(
-      id: json['id'] ?? 0,
+      id: json['id'],
       titulo: json['titulo'],
       descricao: json['descricao'],
-      severidade: json['severidade'] ?? 'media',
-      canal: json['canal'] ?? 'push',
-      data: json['data'] != null ? DateTime.parse(json['data']) : DateTime.now(),
-      lido: json['lido'] ?? false,
+      severidade: json['severidade'],
+      canal: json['canal'],
+      condicao: json['condicao'],
+      data: DateTime.parse(json['data']),
+      lido: json['lido'],
     );
   }
+
+  Alerta marcadoComoLido() => Alerta(
+        id: id,
+        titulo: titulo,
+        descricao: descricao,
+        severidade: severidade,
+        canal: canal,
+        condicao: condicao,
+        data: data,
+        lido: true,
+      );
 }
 
 class PerfilAlerta {

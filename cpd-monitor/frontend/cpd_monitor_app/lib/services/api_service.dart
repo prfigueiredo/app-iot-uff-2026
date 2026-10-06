@@ -21,6 +21,8 @@ class ApiService {
 
   static void definirToken(String? token) => _token = token;
 
+  static String? get token => _token;
+
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         if (_token != null) 'Authorization': 'Bearer $_token',
@@ -93,6 +95,11 @@ class ApiService {
     _verificarErro(r);
     final lista = jsonDecode(r.body) as List;
     return lista.map((e) => Alerta.fromJson(e)).toList();
+  }
+
+  static Future<void> marcarAlertaLido(int id) async {
+    final r = await http.post(Uri.parse('$baseUrl/alertas/$id/lido'), headers: _headers);
+    _verificarErro(r);
   }
 
   static Future<List<PerfilAlerta>> listarPerfisAlerta() async {
