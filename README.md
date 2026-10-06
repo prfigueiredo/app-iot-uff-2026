@@ -9,8 +9,8 @@ FIWARE.
 
 | Versão | Escopo | Situação |
 |---|---|---|
-| V1 | Temperatura do ar-condicionado dinâmica via FIWARE | Backend pronto e testado. Validação do app em andamento |
-| V2 | Alertas a partir dos dados monitorados | Não iniciada |
+| V1 | Temperatura do ar-condicionado dinâmica via FIWARE | Concluída |
+| V2 | Alertas a partir dos dados monitorados | Concluída, aguardando validação das condições pelo PO |
 | V3 | Histórico da temperatura e dos alertas | Não iniciada |
 
 ## Arquitetura
@@ -23,7 +23,10 @@ sensor simulado ──publica──▶ FIWARE Orion ◀──lê a cada 2s──
 - O **FIWARE Orion** é o broker intermediário. Um sensor novo só precisa
   publicar uma entidade, sem mudança no backend.
 - O **backend** lê a entidade do Orion e entrega ao app em `/sensores/atual`.
-- O **app** mostra a temperatura e se atualiza sozinho a cada 5s.
+  A cada leitura, verifica as condições de alerta e envia os alertas ao app
+  em tempo real por WebSocket.
+- O **app** mostra temperatura e umidade, se atualiza sozinho a cada 5s e
+  exibe os alertas assim que são gerados.
 
 | Pasta | Conteúdo |
 |---|---|
@@ -31,6 +34,7 @@ sensor simulado ──publica──▶ FIWARE Orion ◀──lê a cada 2s──
 | [`cpd-monitor/sensor_simulado`](cpd-monitor/sensor_simulado/ar_condicionado.py) | Sensor simulado do ar-condicionado |
 | [`cpd-monitor/backend`](cpd-monitor/backend/README.md) | API em FastAPI |
 | [`cpd-monitor/frontend/cpd_monitor_app`](cpd-monitor/frontend/cpd_monitor_app/README.md) | App em Flutter |
+| [`docs`](docs) | Condições de alerta e relatório de testes da V2 |
 
 ## Pré-requisitos
 
@@ -78,8 +82,11 @@ python cpd-monitor/sensor_simulado/ar_condicionado.py --intervalo 2
 
 Cada linha deve terminar em `Orion HTTP 204`. Opções úteis:
 
-- `--alvo 31` faz a temperatura subir até 31°C, para provocar o alerta de
-  calor (o limite é 28°C).
+- `--alvo 31` faz a temperatura subir até 31°C (alertas de temperatura).
+- `--umidade-alvo 75` faz a umidade subir até 75% (alertas de umidade).
+- `--status desligado` informa o ar-condicionado como desligado.
+- `Ctrl+C` para o sensor. Depois de 60s sem leituras, o backend gera o alerta
+  "Sensor sem comunicação".
 - `--id urn:ngsi-ld:ArCondicionado:cpd-02` publica como outro sensor.
 - `--help` lista todas as opções.
 
@@ -109,9 +116,9 @@ Backend, dentro de `cpd-monitor/backend`:
 ./venv/Scripts/python -m pytest tests
 ```
 
-O teste de integração (`tests/test_integracao_fiware.py`) cobre o fluxo
-sensor → FIWARE → backend → resposta do app. Ele só roda com o Orion no ar. Sem
-o Orion, aparece como pulado (`skipped`).
+Os testes de integração (`tests/test_integracao_fiware.py`) cobrem os fluxos
+sensor → FIWARE → backend → app e sensor → FIWARE → alerta → app. Eles só
+rodam com o Orion no ar. Sem o Orion, aparecem como pulados (`skipped`).
 
 App, dentro de `cpd-monitor/frontend/cpd_monitor_app`:
 
@@ -142,6 +149,20 @@ docker compose -f cpd-monitor/fiware/docker-compose.yml up -d
 | CT07 | Pare o Orion: `docker compose -f cpd-monitor/fiware/docker-compose.yml stop orion` | O valor e a hora congelam. O backend registra um único aviso no log |
 | CT08 | Religue o Orion: `docker compose -f cpd-monitor/fiware/docker-compose.yml start orion` | A atualização volta sozinha, sem reiniciar o backend |
 
+## Roteiro de testes manuais da V2
+
+O roteiro completo, com os resultados da última execução, está em
+[`docs/v2-relatorio-de-testes.md`](docs/v2-relatorio-de-testes.md). Resumo:
+
+| # | Ação | Resultado esperado |
+|---|---|---|
+| CT-V2-01 | Sensor com `--alvo 31` | Acima de 26°C: notificação laranja e card "Atenção". Acima de 28°C: um único alerta crítico e card vermelho |
+| CT-V2-02 | Sensor com `--umidade-alvo 80` | Acima de 60%: "Umidade elevada". Acima de 70%: "Umidade crítica" |
+| CT-V2-03 | Sensor com `--status desligado` | "Ar-condicionado desligado" |
+| CT-V2-04 | Sensor com valores normais e ligado | Avisos de normalização |
+| CT-V2-05 | Pare o sensor por mais de 60s | "Sensor sem comunicação" |
+| CT-V2-06 | Toque num alerta não lido | Alerta fica cinza e o contador do sino diminui |
+
 ## Configuração
 
 O backend lê as configurações de **variáveis de ambiente**. O arquivo
@@ -153,7 +174,16 @@ padrão. Ele não é carregado automaticamente.
 | `FIWARE_URL` | `http://127.0.0.1:1026` | Endereço do Orion |
 | `FIWARE_ENTIDADE_AR_CONDICIONADO` | `urn:ngsi-ld:ArCondicionado:cpd-01` | Entidade lida pelo backend |
 | `FIWARE_INTERVALO_S` | `2` | Segundos entre leituras do Orion |
-| `LIMITE_TEMPERATURA_C` | `28` | Acima disso, o sensor de calor dispara |
+| `TEMPERATURA_ATENCAO_C` | `26` | Alerta de atenção de temperatura |
+| `LIMITE_TEMPERATURA_C` | `28` | Alerta crítico de temperatura e sensor de calor |
+| `HISTERESE_TEMPERATURA_C` | `0.5` | Quanto abaixo do limite a temperatura volta ao normal |
+| `UMIDADE_ATENCAO_PCT` | `60` | Alerta de atenção de umidade |
+| `UMIDADE_CRITICA_PCT` | `70` | Alerta crítico de umidade |
+| `HISTERESE_UMIDADE_PCT` | `2` | Quanto abaixo do limite a umidade volta ao normal |
+| `SENSOR_SEM_COMUNICACAO_S` | `60` | Segundos sem leitura até o alerta de sensor sem comunicação |
+
+O motivo de cada valor está em
+[`docs/v2-condicoes-de-alerta.md`](docs/v2-condicoes-de-alerta.md).
 
 ## Problemas conhecidos
 
@@ -168,9 +198,14 @@ padrão. Ele não é carregado automaticamente.
 - **O app mostra apenas o ar-condicionado `cpd-01`.** Outros sensores já
   conseguem publicar no Orion, mas exibir vários na tela exige mudar o modelo
   de dados.
-- **Alerta de calor repetido.** Enquanto a temperatura passa de 28°C, o app
-  recebe uma notificação nova a cada 15s. Isso vem do protótipo e será tratado
-  na V2.
+- **Alertas em memória.** Os alertas somem ao reiniciar o backend. Guardar o
+  histórico é escopo da V3.
+- **Estado de "lido" compartilhado.** Quando um usuário marca um alerta como
+  lido, ele fica lido para todos.
+- **Arquivos gerados do Flutter.** Rodar `flutter pub get` ou `flutter build`
+  no Windows faz o git mostrar 7 arquivos de `linux/`, `macos/` e `windows/`
+  como modificados. A diferença é só o final de linha. Para descartar, use
+  `git checkout -- linux macos windows` dentro da pasta do app.
 
 ## Branches
 
