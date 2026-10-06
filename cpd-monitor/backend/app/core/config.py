@@ -21,8 +21,13 @@ class Settings:
     # os serviços em app/services/ retornam dados simulados em vez de chamar as APIs reais.
     MODO_SIMULACAO: bool = os.getenv("MODO_SIMULACAO", "true").lower() == "true"
 
-    # Shared key the air conditioning sensor sends in the X-Sensor-Key header.
-    SENSOR_API_KEY: str = os.getenv("SENSOR_API_KEY", "chave-sensor-dev")
+    # FIWARE Orion Context Broker (NGSI-v2). Sensors publish there and the backend
+    # reads from there, so a new sensor never needs a new backend endpoint.
+    FIWARE_URL: str = os.getenv("FIWARE_URL", "http://127.0.0.1:1026")
+    FIWARE_ENTIDADE_AR_CONDICIONADO: str = os.getenv(
+        "FIWARE_ENTIDADE_AR_CONDICIONADO", "urn:ngsi-ld:ArCondicionado:cpd-01"
+    )
+    FIWARE_INTERVALO_S: float = float(os.getenv("FIWARE_INTERVALO_S", "2"))
 
     # Above this temperature the heat sensor flags an alert.
     LIMITE_TEMPERATURA_C: float = float(os.getenv("LIMITE_TEMPERATURA_C", "28"))

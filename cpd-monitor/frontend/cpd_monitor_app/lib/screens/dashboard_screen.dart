@@ -155,10 +155,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (metricas.contains('temperatura'))
                 MetricCard(
                   titulo: 'Temperatura',
-                  valor: '${_leitura!.temperaturaC.toStringAsFixed(1)}°C',
+                  valor: _leitura!.temperaturaC == null ? '-' : '${_leitura!.temperaturaC!.toStringAsFixed(1)}°C',
                   icone: Icons.thermostat,
                   cor: _leitura!.sensorCalorAlerta ? Colors.red : Colors.teal,
-                  subtitulo: '${_leitura!.sensorCalorAlerta ? 'Acima do limite' : 'Normal'} · ${_formatarHora(_leitura!.atualizadoEm)}',
+                  subtitulo: _leitura!.temperaturaAtualizadaEm == null
+                      ? 'Aguardando sensor'
+                      : '${_leitura!.sensorCalorAlerta ? 'Acima do limite' : 'Normal'} · ${_formatarHora(_leitura!.temperaturaAtualizadaEm!)}',
                 ),
               if (metricas.contains('umidade'))
                 MetricCard(titulo: 'Umidade', valor: '${_leitura!.umidadePct.toStringAsFixed(0)}%', icone: Icons.water_drop, cor: Colors.blue),

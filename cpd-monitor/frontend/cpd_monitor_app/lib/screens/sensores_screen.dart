@@ -73,8 +73,10 @@ class _SensoresScreenState extends State<SensoresScreen> {
             children: [
               MetricCard(
                 titulo: 'Ar-condicionado',
-                valor: '${_atual!.temperaturaC.toStringAsFixed(1)}°C',
-                subtitulo: _atual!.arCondicionadoStatus ?? '-',
+                valor: _atual!.temperaturaC == null ? '-' : '${_atual!.temperaturaC!.toStringAsFixed(1)}°C',
+                subtitulo: _atual!.temperaturaAtualizadaEm == null
+                    ? 'Aguardando sensor'
+                    : '${_atual!.arCondicionadoStatus ?? '-'} · ${_formatarHora(_atual!.temperaturaAtualizadaEm!)}',
                 icone: Icons.ac_unit,
                 cor: _atual!.sensorCalorAlerta ? Colors.red : Colors.cyan,
               ),
@@ -96,7 +98,7 @@ class _SensoresScreenState extends State<SensoresScreen> {
           const SizedBox(height: 24),
           const Text('Temperatura - últimas 24h', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),
-          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.temperaturaC).toList(), cor: Colors.teal)),
+          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.temperaturaC).whereType<double>().toList(), cor: Colors.teal)),
           const SizedBox(height: 24),
           const Text('Umidade - últimas 24h', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),

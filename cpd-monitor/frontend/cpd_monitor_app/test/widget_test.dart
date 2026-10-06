@@ -11,13 +11,30 @@ void main() {
       'pessoas_presentes': 1,
       'sensor_calor_alerta': true,
       'ar_condicionado_status': 'ligado',
-      'atualizado_em': '2026-10-05T21:24:45.123456',
+      'temperatura_atualizada_em': '2026-10-05T21:24:45.332000',
+      'atualizado_em': '2026-10-05T21:25:00.123456',
     });
 
     expect(leitura.temperaturaC, 28.5);
     expect(leitura.umidadePct, 48.0);
     expect(leitura.sensorCalorAlerta, isTrue);
     expect(leitura.arCondicionadoStatus, 'ligado');
-    expect(leitura.atualizadoEm.second, 45);
+    expect(leitura.temperaturaAtualizadaEm!.second, 45);
+  });
+
+  test('LeituraSensor accepts a reading before the sensor has published', () {
+    final leitura = LeituraSensor.fromJson({
+      'temperatura_c': null,
+      'temperatura_atualizada_em': null,
+      'umidade_pct': 48.0,
+      'combustivel_gerador_pct': 82.0,
+      'pessoas_presentes': 1,
+      'ar_condicionado_status': null,
+      'atualizado_em': '2026-10-05T21:25:00.123456',
+    });
+
+    expect(leitura.temperaturaC, isNull);
+    expect(leitura.temperaturaAtualizadaEm, isNull);
+    expect(leitura.arCondicionadoStatus, isNull);
   });
 }

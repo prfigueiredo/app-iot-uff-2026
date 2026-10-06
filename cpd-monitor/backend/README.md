@@ -6,7 +6,8 @@ API em FastAPI para o app de monitoramento do CPD da STI de Niterói-RJ (TCC).
 em memória** - não é necessário instalar PostgreSQL nem ter acesso ao
 ambiente real do CPD para testar. Umidade e combustível variam sozinhos a
 cada 15s. A temperatura do ar-condicionado vem do sensor simulado em
-`../sensor_simulado`, que envia leituras em JSON para o backend. Alertas
+`../sensor_simulado`, que publica leituras em JSON no FIWARE Orion, de onde o
+backend as lê. Alertas
 automáticos disparam quando a temperatura passa de `LIMITE_TEMPERATURA_C`
 (28°C por padrão).
 
@@ -23,18 +24,25 @@ A API sobe em `http://localhost:8000`. Documentação automática (Swagger) em
 `http://localhost:8000/docs` - dá pra testar todas as rotas por lá, sem
 precisar do app Flutter.
 
-## Sensor do ar-condicionado
+## Sensor do ar-condicionado via FIWARE
 
-Com a API rodando, em outro terminal:
+```
+sensor simulado ──publica──▶ FIWARE Orion ◀──lê a cada 2s── backend ──▶ app
+```
+
+1. Suba o Orion (precisa do Docker): veja `../fiware/README.md`.
+2. Suba a API (acima).
+3. Em outro terminal, ligue o sensor:
 
 ```bash
 python ../sensor_simulado/ar_condicionado.py
 ```
 
-O sensor envia `{"temperatura_c": 22.3, "status": "ligado"}` para
-`POST /sensores/ar-condicionado`, com o cabeçalho `X-Sensor-Key`
-(`SENSOR_API_KEY`). Para provocar superaquecimento na demonstração, use
-`--alvo 31`. Para ver todas as opções, use `--help`.
+O sensor publica a entidade `urn:ngsi-ld:ArCondicionado:cpd-01` no Orion, e o
+backend copia a leitura para `/sensores/atual` (`temperatura_c`,
+`temperatura_atualizada_em`, `ar_condicionado_status`). Enquanto nenhum sensor
+publicou, esses campos vêm `null`. Para provocar superaquecimento na
+demonstração, use `--alvo 31`. Para ver todas as opções, use `--help`.
 
 ## Testes
 
@@ -42,6 +50,9 @@ O sensor envia `{"temperatura_c": 22.3, "status": "ligado"}` para
 pip install -r requirements-dev.txt
 python -m pytest tests
 ```
+
+O teste de integração (`tests/test_integracao_fiware.py`) só roda com o Orion
+no ar. Sem ele, o teste é pulado.
 
 ## Usuários de teste (perfis de acesso)
 
@@ -57,8 +68,7 @@ python -m pytest tests
 - Registro de tentativas de acesso indevido (`/seguranca/tentativas-acesso`, só admin)
 - Sensores físicos do CPD: temperatura, umidade, gerador, presença, calor,
   ar-condicionado (`/sensores/atual`, `/sensores/historico`)
-- Recebimento das leituras do sensor do ar-condicionado em JSON
-  (`POST /sensores/ar-condicionado`)
+- Temperatura do ar-condicionado lida do FIWARE Orion (`app/services/fiware.py`)
 - Logs simulando o GrayLog (`/integracoes/graylog/logs`, com filtro por nível)
 - Status de serviços simulando o Zabbix (`/integracoes/zabbix/status`)
 - Alertas com perfis personalizados (`/alertas`, `/alertas/perfis`) e
@@ -82,6 +92,6 @@ app/
 ├── core/         # config, segurança (JWT), RBAC, base mockada, WebSocket
 ├── models/       # reservado para modelos de banco real (próxima etapa)
 ├── schemas/      # reservado para schemas adicionais
-├── services/     # reservado para integração real com GrayLog/Zabbix
+├── services/     # integrações externas (FIWARE hoje, GrayLog/Zabbix depois)
 └── main.py       # ponto de entrada + simulador de sensores em background
 ```
