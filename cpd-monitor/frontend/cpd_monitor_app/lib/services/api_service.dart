@@ -14,6 +14,9 @@ class ApiService {
   static const String baseUrl = 'http://localhost:8000';
   static const String wsUrl = 'ws://localhost:8000';
 
+  // How often screens showing live sensor values poll /sensores/atual.
+  static const Duration intervaloAtualizacaoSensores = Duration(seconds: 5);
+
   static String? _token;
 
   static void definirToken(String? token) => _token = token;

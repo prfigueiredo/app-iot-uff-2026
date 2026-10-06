@@ -11,6 +11,7 @@ de resposta.
 import random
 from datetime import datetime, timedelta
 
+from app.core.config import settings
 from app.core.security import hash_senha
 
 # ---------------------------------------------------------------------------
@@ -53,13 +54,15 @@ def registrar_tentativa_indevida(usuario: str, motivo: str):
 # Sensores físicos do CPD
 # ---------------------------------------------------------------------------
 LEITURA_ATUAL = {
-    "temperatura_c": 21.5,
+    # Air conditioning fields stay empty until the first reading arrives via FIWARE.
+    "temperatura_c": None,
+    "temperatura_atualizada_em": None,
     "umidade_pct": 48.0,
     "combustivel_gerador_pct": 82.0,
     "pessoas_presentes": 1,
     "sensor_presenca_ativo": True,
     "sensor_calor_alerta": False,
-    "ar_condicionado_status": "ligado",
+    "ar_condicionado_status": None,
     "atualizado_em": datetime.now().isoformat(),
 }
 
@@ -84,17 +87,24 @@ def _seed_historico_sensores():
 _seed_historico_sensores()
 
 
+def registrar_leitura_ar_condicionado(temperatura_c: float, status: str, medido_em: datetime) -> dict:
+    """Stores the air conditioning reading obtained from FIWARE. FIWARE is the
+    only source of temperature, so the internal simulator never touches it.
+    medido_em is when the sensor published, so a dead sensor shows an old time."""
+    LEITURA_ATUAL["temperatura_c"] = round(temperatura_c, 1)
+    LEITURA_ATUAL["temperatura_atualizada_em"] = medido_em.isoformat()
+    LEITURA_ATUAL["ar_condicionado_status"] = status
+    LEITURA_ATUAL["sensor_calor_alerta"] = temperatura_c > settings.LIMITE_TEMPERATURA_C
+    return LEITURA_ATUAL
+
+
 def simular_nova_leitura():
-    LEITURA_ATUAL["temperatura_c"] = round(
-        max(16, min(32, LEITURA_ATUAL["temperatura_c"] + random.uniform(-0.4, 0.4))), 1
-    )
     LEITURA_ATUAL["umidade_pct"] = round(
         max(20, min(80, LEITURA_ATUAL["umidade_pct"] + random.uniform(-1, 1))), 1
     )
     LEITURA_ATUAL["combustivel_gerador_pct"] = round(
         max(0, LEITURA_ATUAL["combustivel_gerador_pct"] - random.uniform(0, 0.05)), 1
     )
-    LEITURA_ATUAL["sensor_calor_alerta"] = LEITURA_ATUAL["temperatura_c"] > 28
     LEITURA_ATUAL["atualizado_em"] = datetime.now().isoformat()
 
     HISTORICO_SENSORES.append({**LEITURA_ATUAL})

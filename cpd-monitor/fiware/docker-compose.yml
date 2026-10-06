@@ -1,0 +1,18 @@
+# FIWARE Orion Context Broker: sensors publish here and the backend reads from here.
+# Versions follow the compose file shipped with Orion 4.5.0.
+services:
+  orion:
+    image: fiware/orion:4.5.0
+    ports:
+      - "1026:1026"
+    depends_on:
+      - mongo
+    command: -dbURI mongodb://mongo -logLevel WARN
+
+  mongo:
+    image: mongo:8.0
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

@@ -1,30 +1,40 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:cpd_monitor_app/main.dart';
+import 'package:cpd_monitor_app/models/leitura_sensor.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('LeituraSensor reads the air conditioning fields sent by the backend', () {
+    final leitura = LeituraSensor.fromJson({
+      'temperatura_c': 28.5,
+      'umidade_pct': 48,
+      'combustivel_gerador_pct': 82.0,
+      'pessoas_presentes': 1,
+      'sensor_calor_alerta': true,
+      'ar_condicionado_status': 'ligado',
+      'temperatura_atualizada_em': '2026-10-05T21:24:45.332000',
+      'atualizado_em': '2026-10-05T21:25:00.123456',
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(leitura.temperaturaC, 28.5);
+    expect(leitura.umidadePct, 48.0);
+    expect(leitura.sensorCalorAlerta, isTrue);
+    expect(leitura.arCondicionadoStatus, 'ligado');
+    expect(leitura.temperaturaAtualizadaEm!.second, 45);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  test('LeituraSensor accepts a reading before the sensor has published', () {
+    final leitura = LeituraSensor.fromJson({
+      'temperatura_c': null,
+      'temperatura_atualizada_em': null,
+      'umidade_pct': 48.0,
+      'combustivel_gerador_pct': 82.0,
+      'pessoas_presentes': 1,
+      'ar_condicionado_status': null,
+      'atualizado_em': '2026-10-05T21:25:00.123456',
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(leitura.temperaturaC, isNull);
+    expect(leitura.temperaturaAtualizadaEm, isNull);
+    expect(leitura.arCondicionadoStatus, isNull);
   });
 }
