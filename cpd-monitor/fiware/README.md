@@ -33,8 +33,10 @@ curl "http://127.0.0.1:1026/v2/entities?options=keyValues"
   "id": "urn:ngsi-ld:ArCondicionado:cpd-01",
   "type": "ArCondicionado",
   "temperatura": 22.3,
+  "umidade": 48.0,
   "status": "ligado"
 }
 ```
 
-`temperatura` em °C. `status` é `ligado` ou `desligado`.
+`temperatura` em °C. `umidade` em % (opcional). `status` é `ligado` ou
+`desligado`.

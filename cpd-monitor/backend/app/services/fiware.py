@@ -17,6 +17,7 @@ from app.core.mock_db import registrar_leitura_ar_condicionado
 class EntidadeArCondicionado(BaseModel):
     # Orion accepts any JSON, so readings are validated here.
     temperatura: float = Field(ge=-20, le=60)
+    umidade: float | None = Field(default=None, ge=0, le=100)
     status: Literal["ligado", "desligado"] = "ligado"
     dateModified: datetime
 
@@ -42,5 +43,5 @@ async def sincronizar_ar_condicionado(client: httpx.AsyncClient) -> bool:
     entidade = EntidadeArCondicionado.model_validate(dados)
     # Orion reports UTC. The rest of the backend uses naive local time.
     medido_em = entidade.dateModified.astimezone().replace(tzinfo=None)
-    registrar_leitura_ar_condicionado(entidade.temperatura, entidade.status, medido_em)
+    registrar_leitura_ar_condicionado(entidade.temperatura, entidade.status, medido_em, entidade.umidade)
     return True

@@ -69,11 +69,15 @@ no ar. Sem ele, o teste é pulado.
 - Sensores físicos do CPD: temperatura, umidade, gerador, presença, calor,
   ar-condicionado (`/sensores/atual`, `/sensores/historico`)
 - Temperatura do ar-condicionado lida do FIWARE Orion (`app/services/fiware.py`)
+- Geração de alertas a partir das leituras (`app/services/alertas.py`), com as
+  condições descritas em `../../docs/v2-condicoes-de-alerta.md`
 - Logs simulando o GrayLog (`/integracoes/graylog/logs`, com filtro por nível)
 - Status de serviços simulando o Zabbix (`/integracoes/zabbix/status`)
-- Alertas com perfis personalizados (`/alertas`, `/alertas/perfis`) e
-  simulação manual (`/alertas/simular`)
-- Push notification em tempo real via WebSocket (`/alertas/ws`)
+- Alertas com perfis personalizados (`/alertas`, `/alertas/perfis`),
+  simulação manual (`/alertas/simular`) e marcação de lido
+  (`POST /alertas/{id}/lido`)
+- Push notification em tempo real via WebSocket (`/alertas/ws`). A primeira
+  mensagem do cliente deve ser `{"token": "<token de login>"}`
 - Dashboard personalizável por usuário (`/dashboard/preferencias`)
 
 ## Modo simulação → dados reais
