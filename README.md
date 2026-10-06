@@ -34,7 +34,7 @@ sensor simulado ──publica──▶ FIWARE Orion ◀──lê a cada 2s──
 | [`cpd-monitor/sensor_simulado`](cpd-monitor/sensor_simulado/ar_condicionado.py) | Sensor simulado do ar-condicionado |
 | [`cpd-monitor/backend`](cpd-monitor/backend/README.md) | API em FastAPI |
 | [`cpd-monitor/frontend/cpd_monitor_app`](cpd-monitor/frontend/cpd_monitor_app/README.md) | App em Flutter |
-| [`docs`](docs) | Condições de alerta e relatório de testes da V2 |
+| [`docs`](docs) | Plano de projeto, condições de alerta, relatório de testes e roteiro de demonstração da V2 |
 
 ## Pré-requisitos
 
