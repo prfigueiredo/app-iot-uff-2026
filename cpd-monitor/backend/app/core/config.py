@@ -21,6 +21,12 @@ class Settings:
     # os serviços em app/services/ retornam dados simulados em vez de chamar as APIs reais.
     MODO_SIMULACAO: bool = os.getenv("MODO_SIMULACAO", "true").lower() == "true"
 
+    # Shared key the air conditioning sensor sends in the X-Sensor-Key header.
+    SENSOR_API_KEY: str = os.getenv("SENSOR_API_KEY", "chave-sensor-dev")
+
+    # Above this temperature the heat sensor flags an alert.
+    LIMITE_TEMPERATURA_C: float = float(os.getenv("LIMITE_TEMPERATURA_C", "28"))
+
     # Endpoints reais (usados quando MODO_SIMULACAO = false)
     GRAYLOG_URL: str = os.getenv("GRAYLOG_URL", "")
     GRAYLOG_TOKEN: str = os.getenv("GRAYLOG_TOKEN", "")

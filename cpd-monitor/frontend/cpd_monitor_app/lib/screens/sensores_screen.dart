@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/leitura_sensor.dart';
@@ -15,11 +16,28 @@ class _SensoresScreenState extends State<SensoresScreen> {
   LeituraSensor? _atual;
   List<LeituraSensor> _historico = [];
   bool _carregando = true;
+  Timer? _timerSensores;
 
   @override
   void initState() {
     super.initState();
     _carregar();
+    _timerSensores = Timer.periodic(ApiService.intervaloAtualizacaoSensores, (_) => _atualizarLeitura());
+  }
+
+  @override
+  void dispose() {
+    _timerSensores?.cancel();
+    super.dispose();
+  }
+
+  // A failed poll keeps the last value, and "Atualizado às" shows its age.
+  Future<void> _atualizarLeitura() async {
+    if (_carregando) return;
+    try {
+      final atual = await ApiService.leituraAtual();
+      if (mounted) setState(() => _atual = atual);
+    } catch (_) {}
   }
 
   Future<void> _carregar() async {
@@ -53,7 +71,13 @@ class _SensoresScreenState extends State<SensoresScreen> {
             mainAxisSpacing: 12,
             childAspectRatio: 1.3,
             children: [
-              MetricCard(titulo: 'Ar-condicionado', valor: _atual!.arCondicionadoStatus ?? '-', icone: Icons.ac_unit, cor: Colors.cyan),
+              MetricCard(
+                titulo: 'Ar-condicionado',
+                valor: '${_atual!.temperaturaC.toStringAsFixed(1)}°C',
+                subtitulo: _atual!.arCondicionadoStatus ?? '-',
+                icone: Icons.ac_unit,
+                cor: _atual!.sensorCalorAlerta ? Colors.red : Colors.cyan,
+              ),
               MetricCard(
                 titulo: 'Sensor de calor',
                 valor: _atual!.sensorCalorAlerta ? 'Alerta' : 'Normal',
@@ -82,7 +106,8 @@ class _SensoresScreenState extends State<SensoresScreen> {
     );
   }
 
-  String _formatarHora(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  String _formatarHora(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
 }
 
 class _GraficoLinha extends StatelessWidget {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/leitura_sensor.dart';
 import '../models/servico_zabbix.dart';
@@ -20,11 +21,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _preferencias;
   bool _carregando = true;
   String? _erro;
+  Timer? _timerSensores;
 
   @override
   void initState() {
     super.initState();
     _carregar();
+    _timerSensores = Timer.periodic(ApiService.intervaloAtualizacaoSensores, (_) => _atualizarLeitura());
+  }
+
+  @override
+  void dispose() {
+    _timerSensores?.cancel();
+    super.dispose();
+  }
+
+  // Refreshes only the sensor reading, without the full-screen spinner.
+  // A failed poll keeps the last value and the next tick tries again.
+  Future<void> _atualizarLeitura() async {
+    if (_carregando || _erro != null) return;
+    try {
+      final leitura = await ApiService.leituraAtual();
+      if (mounted) setState(() => _leitura = leitura);
+    } catch (_) {}
   }
 
   Future<void> _carregar() async {
@@ -139,7 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   valor: '${_leitura!.temperaturaC.toStringAsFixed(1)}°C',
                   icone: Icons.thermostat,
                   cor: _leitura!.sensorCalorAlerta ? Colors.red : Colors.teal,
-                  subtitulo: _leitura!.sensorCalorAlerta ? 'Acima do limite' : 'Normal',
+                  subtitulo: '${_leitura!.sensorCalorAlerta ? 'Acima do limite' : 'Normal'} · ${_formatarHora(_leitura!.atualizadoEm)}',
                 ),
               if (metricas.contains('umidade'))
                 MetricCard(titulo: 'Umidade', valor: '${_leitura!.umidadePct.toStringAsFixed(0)}%', icone: Icons.water_drop, cor: Colors.blue),
@@ -191,6 +210,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  String _formatarHora(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
 }
 
 class _ErroCarregamento extends StatelessWidget {

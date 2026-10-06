@@ -1,9 +1,12 @@
 """
 Dependências de autenticação (usuário logado) e RBAC (controle de acesso por perfil).
 """
-from fastapi import Depends, HTTPException, status
+import secrets
+
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+from app.core.config import settings
 from app.core.mock_db import USUARIOS, registrar_tentativa_indevida
 from app.core.security import decodificar_token
 
@@ -41,3 +44,10 @@ def exigir_perfil(*perfis_permitidos: str):
         return usuario
 
     return checador
+
+
+def exigir_chave_sensor(x_sensor_key: str = Header(default="")):
+    """Authenticates sensor devices, which have no user account."""
+    if not secrets.compare_digest(x_sensor_key, settings.SENSOR_API_KEY):
+        registrar_tentativa_indevida("sensor", "chave de sensor inválida")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Chave de sensor inválida")

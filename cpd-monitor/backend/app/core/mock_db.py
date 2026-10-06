@@ -11,6 +11,7 @@ de resposta.
 import random
 from datetime import datetime, timedelta
 
+from app.core.config import settings
 from app.core.security import hash_senha
 
 # ---------------------------------------------------------------------------
@@ -84,17 +85,23 @@ def _seed_historico_sensores():
 _seed_historico_sensores()
 
 
+def registrar_leitura_ar_condicionado(temperatura_c: float, status: str) -> dict:
+    """Stores a reading pushed by the air conditioning sensor. The sensor is the
+    only source of temperature, so the internal simulator never touches it."""
+    LEITURA_ATUAL["temperatura_c"] = round(temperatura_c, 1)
+    LEITURA_ATUAL["ar_condicionado_status"] = status
+    LEITURA_ATUAL["sensor_calor_alerta"] = temperatura_c > settings.LIMITE_TEMPERATURA_C
+    LEITURA_ATUAL["atualizado_em"] = datetime.now().isoformat()
+    return LEITURA_ATUAL
+
+
 def simular_nova_leitura():
-    LEITURA_ATUAL["temperatura_c"] = round(
-        max(16, min(32, LEITURA_ATUAL["temperatura_c"] + random.uniform(-0.4, 0.4))), 1
-    )
     LEITURA_ATUAL["umidade_pct"] = round(
         max(20, min(80, LEITURA_ATUAL["umidade_pct"] + random.uniform(-1, 1))), 1
     )
     LEITURA_ATUAL["combustivel_gerador_pct"] = round(
         max(0, LEITURA_ATUAL["combustivel_gerador_pct"] - random.uniform(0, 0.05)), 1
     )
-    LEITURA_ATUAL["sensor_calor_alerta"] = LEITURA_ATUAL["temperatura_c"] > 28
     LEITURA_ATUAL["atualizado_em"] = datetime.now().isoformat()
 
     HISTORICO_SENSORES.append({**LEITURA_ATUAL})

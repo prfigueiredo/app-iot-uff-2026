@@ -4,9 +4,11 @@ API em FastAPI para o app de monitoramento do CPD da STI de Niterói-RJ (TCC).
 
 **Este é o app completo e funcional, com todos os dados MOCKADOS (simulados)
 em memória** - não é necessário instalar PostgreSQL nem ter acesso ao
-ambiente real do CPD para testar. Os dados de sensores variam sozinhos a
-cada 15s (simulando leituras reais), e alertas automáticos disparam quando a
-"temperatura" simulada passa de 28°C.
+ambiente real do CPD para testar. Umidade e combustível variam sozinhos a
+cada 15s. A temperatura do ar-condicionado vem do sensor simulado em
+`../sensor_simulado`, que envia leituras em JSON para o backend. Alertas
+automáticos disparam quando a temperatura passa de `LIMITE_TEMPERATURA_C`
+(28°C por padrão).
 
 ## Como rodar localmente
 
@@ -20,6 +22,26 @@ uvicorn app.main:app --reload
 A API sobe em `http://localhost:8000`. Documentação automática (Swagger) em
 `http://localhost:8000/docs` - dá pra testar todas as rotas por lá, sem
 precisar do app Flutter.
+
+## Sensor do ar-condicionado
+
+Com a API rodando, em outro terminal:
+
+```bash
+python ../sensor_simulado/ar_condicionado.py
+```
+
+O sensor envia `{"temperatura_c": 22.3, "status": "ligado"}` para
+`POST /sensores/ar-condicionado`, com o cabeçalho `X-Sensor-Key`
+(`SENSOR_API_KEY`). Para provocar superaquecimento na demonstração, use
+`--alvo 31`. Para ver todas as opções, use `--help`.
+
+## Testes
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests
+```
 
 ## Usuários de teste (perfis de acesso)
 
@@ -35,6 +57,8 @@ precisar do app Flutter.
 - Registro de tentativas de acesso indevido (`/seguranca/tentativas-acesso`, só admin)
 - Sensores físicos do CPD: temperatura, umidade, gerador, presença, calor,
   ar-condicionado (`/sensores/atual`, `/sensores/historico`)
+- Recebimento das leituras do sensor do ar-condicionado em JSON
+  (`POST /sensores/ar-condicionado`)
 - Logs simulando o GrayLog (`/integracoes/graylog/logs`, com filtro por nível)
 - Status de serviços simulando o Zabbix (`/integracoes/zabbix/status`)
 - Alertas com perfis personalizados (`/alertas`, `/alertas/perfis`) e
