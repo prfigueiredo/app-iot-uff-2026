@@ -9,8 +9,8 @@ class WebSocketManager:
     def __init__(self):
         self.conexoes_ativas: list[WebSocket] = []
 
-    async def conectar(self, websocket: WebSocket):
-        await websocket.accept()
+    def adicionar(self, websocket: WebSocket):
+        """Registers an already accepted and authenticated connection."""
         self.conexoes_ativas.append(websocket)
 
     def desconectar(self, websocket: WebSocket):

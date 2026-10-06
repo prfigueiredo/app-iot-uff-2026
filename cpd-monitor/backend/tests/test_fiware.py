@@ -49,13 +49,6 @@ def test_hora_da_leitura_e_a_do_orion_convertida_para_hora_local():
     assert mock_db.LEITURA_ATUAL["temperatura_atualizada_em"] == esperado.isoformat()
 
 
-def test_acima_do_limite_aciona_sensor_de_calor():
-    sincronizar(entidade(settings.LIMITE_TEMPERATURA_C + 1))
-    assert mock_db.LEITURA_ATUAL["sensor_calor_alerta"] is True
-    sincronizar(entidade(settings.LIMITE_TEMPERATURA_C - 1))
-    assert mock_db.LEITURA_ATUAL["sensor_calor_alerta"] is False
-
-
 def test_sensor_que_ainda_nao_publicou_nao_inventa_valor():
     antes = dict(mock_db.LEITURA_ATUAL)
     assert sincronizar(httpx.Response(404, json={"error": "NotFound"})) is False

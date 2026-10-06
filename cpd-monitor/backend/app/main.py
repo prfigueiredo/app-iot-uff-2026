@@ -4,6 +4,7 @@ Ponto de entrada da API backend (FastAPI).
 """
 import asyncio
 import logging
+from datetime import datetime
 
 import httpx
 from fastapi import FastAPI
@@ -11,9 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from app.core.config import settings
-from app.core.mock_db import simular_nova_leitura
-from app.core.ws_manager import ws_manager
+from app.core.mock_db import LEITURA_ATUAL, simular_nova_leitura
 from app.api import auth, sensores, alertas, integracoes, dashboard, seguranca
+from app.services.alertas import MonitorDeAlertas, estado_para_o_app
 from app.services.fiware import sincronizar_ar_condicionado
 
 log = logging.getLogger("uvicorn.error")
@@ -51,24 +52,15 @@ def health_check():
 async def _loop_simulacao_sensores():
     while True:
         await asyncio.sleep(15)
-        leitura = simular_nova_leitura()
-        if leitura["sensor_calor_alerta"]:
-            await ws_manager.transmitir(
-                {
-                    "tipo": "novo_alerta",
-                    "alerta": {
-                        "titulo": "Temperatura acima do limite",
-                        "descricao": f"Sensor de calor detectou {leitura['temperatura_c']}°C no CPD",
-                        "severidade": "alta",
-                        "canal": "push",
-                    },
-                }
-            )
+        simular_nova_leitura()
 
 
-async def _loop_fiware():
-    """Polls Orion for the air conditioning reading. Logs only state changes,
-    so an Orion outage produces one warning instead of one every poll."""
+async def _loop_monitoramento():
+    """Each tick: copy the latest reading from Orion, then check alert conditions.
+    Conditions are checked even when Orion fails, since that is exactly when
+    the sensor stops communicating. Orion problems are logged only on state
+    changes, so an outage produces one warning instead of one every poll."""
+    monitor = MonitorDeAlertas(monitorando_desde=datetime.now())
     estado_anterior = None
     async with httpx.AsyncClient(base_url=settings.FIWARE_URL, timeout=5) as client:
         while True:
@@ -85,6 +77,15 @@ async def _loop_fiware():
                 else:
                     log.warning("FIWARE: falha ao ler o Orion em %s (%s)", settings.FIWARE_URL, detalhe)
                 estado_anterior = estado
+
+            try:
+                for alerta in await monitor.verificar(LEITURA_ATUAL, datetime.now()):
+                    log.info("Alerta gerado: %s", alerta["titulo"])
+                LEITURA_ATUAL.update(estado_para_o_app(monitor.niveis))
+            except Exception:
+                # A bug in one check must not silently stop all monitoring.
+                log.exception("Falha ao verificar as condições de alerta")
+
             await asyncio.sleep(settings.FIWARE_INTERVALO_S)
 
 
@@ -96,6 +97,6 @@ def _iniciar_em_background(corrotina):
 
 @app.on_event("startup")
 async def iniciar_tarefas_em_background():
-    _iniciar_em_background(_loop_fiware())
+    _iniciar_em_background(_loop_monitoramento())
     if settings.MODO_SIMULACAO:
         _iniciar_em_background(_loop_simulacao_sensores())

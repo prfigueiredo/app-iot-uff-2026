@@ -29,8 +29,15 @@ class Settings:
     )
     FIWARE_INTERVALO_S: float = float(os.getenv("FIWARE_INTERVALO_S", "2"))
 
-    # Above this temperature the heat sensor flags an alert.
+    # Alert conditions (V2), documented in docs/v2-condicoes-de-alerta.md.
+    # The critical temperature level also sets sensor_calor_alerta.
+    TEMPERATURA_ATENCAO_C: float = float(os.getenv("TEMPERATURA_ATENCAO_C", "26"))
     LIMITE_TEMPERATURA_C: float = float(os.getenv("LIMITE_TEMPERATURA_C", "28"))
+    HISTERESE_TEMPERATURA_C: float = float(os.getenv("HISTERESE_TEMPERATURA_C", "0.5"))
+    UMIDADE_ATENCAO_PCT: float = float(os.getenv("UMIDADE_ATENCAO_PCT", "60"))
+    UMIDADE_CRITICA_PCT: float = float(os.getenv("UMIDADE_CRITICA_PCT", "70"))
+    HISTERESE_UMIDADE_PCT: float = float(os.getenv("HISTERESE_UMIDADE_PCT", "2"))
+    SENSOR_SEM_COMUNICACAO_S: float = float(os.getenv("SENSOR_SEM_COMUNICACAO_S", "60"))
 
     # Endpoints reais (usados quando MODO_SIMULACAO = false)
     GRAYLOG_URL: str = os.getenv("GRAYLOG_URL", "")

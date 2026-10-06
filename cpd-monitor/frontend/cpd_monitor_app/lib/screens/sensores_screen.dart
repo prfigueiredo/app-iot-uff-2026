@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/leitura_sensor.dart';
 import '../services/api_service.dart';
 import '../widgets/metric_card.dart';
+import '../widgets/severidade.dart';
 
 class SensoresScreen extends StatefulWidget {
   const SensoresScreen({super.key});
@@ -78,7 +79,7 @@ class _SensoresScreenState extends State<SensoresScreen> {
                     ? 'Aguardando sensor'
                     : '${_atual!.arCondicionadoStatus ?? '-'} · ${_formatarHora(_atual!.temperaturaAtualizadaEm!)}',
                 icone: Icons.ac_unit,
-                cor: _atual!.sensorCalorAlerta ? Colors.red : Colors.cyan,
+                cor: corDoNivel(_atual!.nivel('temperatura'), Colors.cyan),
               ),
               MetricCard(
                 titulo: 'Sensor de calor',
@@ -102,7 +103,7 @@ class _SensoresScreenState extends State<SensoresScreen> {
           const SizedBox(height: 24),
           const Text('Umidade - últimas 24h', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),
-          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.umidadePct).toList(), cor: Colors.blue)),
+          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.umidadePct).whereType<double>().toList(), cor: Colors.blue)),
         ],
       ),
     );

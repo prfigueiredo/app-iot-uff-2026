@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/alerta.dart';
+import '../services/alertas_provider.dart';
 import '../services/api_service.dart';
 import '../services/auth_provider.dart';
+import '../widgets/severidade.dart';
 
 class AlertasScreen extends StatefulWidget {
   const AlertasScreen({super.key});
@@ -13,36 +15,47 @@ class AlertasScreen extends StatefulWidget {
 
 class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<Alerta> _alertas = [];
   List<PerfilAlerta> _perfis = [];
-  bool _carregando = true;
+  bool _carregandoPerfis = true;
+  String? _erroPerfis;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _carregar();
+    _carregarPerfis();
   }
 
-  Future<void> _carregar() async {
-    setState(() => _carregando = true);
-    final alertas = await ApiService.listarAlertas();
-    final perfis = await ApiService.listarPerfisAlerta();
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _carregarPerfis() async {
     setState(() {
-      _alertas = alertas;
-      _perfis = perfis;
-      _carregando = false;
+      _carregandoPerfis = true;
+      _erroPerfis = null;
     });
+    try {
+      final perfis = await ApiService.listarPerfisAlerta();
+      if (!mounted) return;
+      setState(() => _perfis = perfis);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _erroPerfis = e.toString().replaceFirst('Exception: ', ''));
+    }
+    if (mounted) setState(() => _carregandoPerfis = false);
   }
 
-  Color _corSeveridade(String s) {
-    switch (s) {
-      case 'alta':
-        return Colors.red;
-      case 'media':
-        return Colors.orange;
-      default:
-        return Colors.blueGrey;
+  Future<void> _marcarComoLido(Alerta alerta) async {
+    try {
+      await context.read<AlertasProvider>().marcarComoLido(alerta);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível marcar como lido: ${e.toString().replaceFirst('Exception: ', '')}')),
+      );
     }
   }
 
@@ -92,7 +105,7 @@ class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProvider
                   equipe: equipeCtrl.text.isEmpty ? 'Não definida' : equipeCtrl.text,
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
-                _carregar();
+                _carregarPerfis();
               },
               child: const Text('Criar'),
             ),
@@ -106,6 +119,7 @@ class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProvider
   Widget build(BuildContext context) {
     final perfil = context.watch<AuthProvider>().usuario?.perfil ?? 'visualizador';
     final podeGerenciar = perfil == 'admin' || perfil == 'operador';
+    final alertas = context.watch<AlertasProvider>();
 
     return Column(
       children: [
@@ -122,63 +136,138 @@ class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProvider
         ),
         TabBar(
           controller: _tabController,
-          tabs: const [Tab(text: 'Recebidos'), Tab(text: 'Perfis')],
+          tabs: [
+            Tab(text: alertas.naoLidos > 0 ? 'Recebidos (${alertas.naoLidos})' : 'Recebidos'),
+            const Tab(text: 'Perfis'),
+          ],
         ),
         Expanded(
-          child: _carregando
-              ? const Center(child: CircularProgressIndicator())
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    RefreshIndicator(
-                      onRefresh: _carregar,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _alertas.length,
-                        itemBuilder: (ctx, i) {
-                          final a = _alertas[i];
-                          return Card(
-                            elevation: 0,
-                            margin: const EdgeInsets.only(bottom: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: _corSeveridade(a.severidade).withValues(alpha: 0.4)),
-                            ),
-                            child: ListTile(
-                              leading: Icon(Icons.warning_amber_rounded, color: _corSeveridade(a.severidade)),
-                              title: Text(a.titulo, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text('${a.descricao}\nvia ${a.canal}'),
-                              isThreeLine: true,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    RefreshIndicator(
-                      onRefresh: _carregar,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _perfis.length,
-                        itemBuilder: (ctx, i) {
-                          final p = _perfis[i];
-                          return Card(
-                            elevation: 0,
-                            margin: const EdgeInsets.only(bottom: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[300]!)),
-                            child: ListTile(
-                              title: Text(p.nome, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text('${p.periodo}\nEquipe: ${p.equipe} · Canais: ${p.canais.join(", ")}'),
-                              isThreeLine: true,
-                              trailing: Icon(p.ativo ? Icons.check_circle : Icons.pause_circle, color: p.ativo ? Colors.green : Colors.grey),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _ListaComEstado(
+                carregando: alertas.carregando && alertas.alertas.isEmpty,
+                erro: alertas.erro,
+                vazia: alertas.alertas.isEmpty,
+                mensagemVazia: 'Nenhum alerta até agora',
+                aoAtualizar: alertas.carregar,
+                itemCount: alertas.alertas.length,
+                itemBuilder: (ctx, i) => _CardAlerta(
+                  alerta: alertas.alertas[i],
+                  aoTocar: () => _marcarComoLido(alertas.alertas[i]),
                 ),
+              ),
+              _ListaComEstado(
+                carregando: _carregandoPerfis,
+                erro: _erroPerfis,
+                vazia: _perfis.isEmpty,
+                mensagemVazia: 'Nenhum perfil cadastrado',
+                aoAtualizar: _carregarPerfis,
+                itemCount: _perfis.length,
+                itemBuilder: (ctx, i) {
+                  final p = _perfis[i];
+                  return Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[300]!)),
+                    child: ListTile(
+                      title: Text(p.nome, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text('${p.periodo}\nEquipe: ${p.equipe} · Canais: ${p.canais.join(", ")}'),
+                      isThreeLine: true,
+                      trailing: Icon(p.ativo ? Icons.check_circle : Icons.pause_circle, color: p.ativo ? Colors.green : Colors.grey),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _CardAlerta extends StatelessWidget {
+  final Alerta alerta;
+  final VoidCallback aoTocar;
+  const _CardAlerta({required this.alerta, required this.aoTocar});
+
+  String _formatarData(DateTime d) {
+    String dois(int n) => n.toString().padLeft(2, '0');
+    return '${dois(d.day)}/${dois(d.month)} ${dois(d.hour)}:${dois(d.minute)}:${dois(d.second)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cor = corDaSeveridade(alerta.severidade);
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 10),
+      color: alerta.lido ? null : cor.withValues(alpha: 0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: cor.withValues(alpha: alerta.lido ? 0.2 : 0.5)),
+      ),
+      child: ListTile(
+        onTap: aoTocar,
+        leading: Icon(iconeDaSeveridade(alerta.severidade), color: cor),
+        title: Text(
+          alerta.titulo,
+          style: TextStyle(fontWeight: alerta.lido ? FontWeight.normal : FontWeight.w700),
+        ),
+        subtitle: Text('${alerta.descricao}\n${_formatarData(alerta.data)} · via ${alerta.canal}'),
+        isThreeLine: true,
+        trailing: alerta.lido ? null : Icon(Icons.circle, size: 10, color: cor),
+      ),
+    );
+  }
+}
+
+/// A pull-to-refresh list that also shows loading, error and empty states.
+class _ListaComEstado extends StatelessWidget {
+  final bool carregando;
+  final String? erro;
+  final bool vazia;
+  final String mensagemVazia;
+  final Future<void> Function() aoAtualizar;
+  final int itemCount;
+  final IndexedWidgetBuilder itemBuilder;
+
+  const _ListaComEstado({
+    required this.carregando,
+    required this.erro,
+    required this.vazia,
+    required this.mensagemVazia,
+    required this.aoAtualizar,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (carregando) return const Center(child: CircularProgressIndicator());
+    if (erro != null && vazia) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 40, color: Colors.red),
+              const SizedBox(height: 12),
+              Text(erro!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton(onPressed: aoAtualizar, child: const Text('Tentar novamente')),
+            ],
+          ),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: aoAtualizar,
+      child: vazia
+          ? ListView(children: [Padding(padding: const EdgeInsets.all(32), child: Center(child: Text(mensagemVazia)))])
+          : ListView.builder(padding: const EdgeInsets.all(16), itemCount: itemCount, itemBuilder: itemBuilder),
     );
   }
 }
