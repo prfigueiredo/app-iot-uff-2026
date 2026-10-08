@@ -53,13 +53,17 @@ def registrar_tentativa_indevida(usuario: str, motivo: str):
 # Sensores físicos do CPD
 # ---------------------------------------------------------------------------
 LEITURA_ATUAL = {
-    "temperatura_c": 21.5,
-    "umidade_pct": 48.0,
+    # Air conditioning fields stay empty until the first reading arrives via FIWARE.
+    "temperatura_c": None,
+    "temperatura_atualizada_em": None,
+    "umidade_pct": None,
     "combustivel_gerador_pct": 82.0,
     "pessoas_presentes": 1,
     "sensor_presenca_ativo": True,
+    # Filled by the alert monitor, from the same levels that generate alerts.
     "sensor_calor_alerta": False,
-    "ar_condicionado_status": "ligado",
+    "niveis_alerta": {},
+    "ar_condicionado_status": None,
     "atualizado_em": datetime.now().isoformat(),
 }
 
@@ -84,17 +88,24 @@ def _seed_historico_sensores():
 _seed_historico_sensores()
 
 
+def registrar_leitura_ar_condicionado(
+    temperatura_c: float, status: str, medido_em: datetime, umidade_pct: float | None = None
+) -> dict:
+    """Stores the air conditioning reading obtained from FIWARE. FIWARE is the
+    only source of temperature and humidity, so the internal simulator never
+    touches them. medido_em is when the sensor published, so a dead sensor
+    shows an old time."""
+    LEITURA_ATUAL["temperatura_c"] = round(temperatura_c, 1)
+    LEITURA_ATUAL["umidade_pct"] = None if umidade_pct is None else round(umidade_pct, 1)
+    LEITURA_ATUAL["temperatura_atualizada_em"] = medido_em.isoformat()
+    LEITURA_ATUAL["ar_condicionado_status"] = status
+    return LEITURA_ATUAL
+
+
 def simular_nova_leitura():
-    LEITURA_ATUAL["temperatura_c"] = round(
-        max(16, min(32, LEITURA_ATUAL["temperatura_c"] + random.uniform(-0.4, 0.4))), 1
-    )
-    LEITURA_ATUAL["umidade_pct"] = round(
-        max(20, min(80, LEITURA_ATUAL["umidade_pct"] + random.uniform(-1, 1))), 1
-    )
     LEITURA_ATUAL["combustivel_gerador_pct"] = round(
         max(0, LEITURA_ATUAL["combustivel_gerador_pct"] - random.uniform(0, 0.05)), 1
     )
-    LEITURA_ATUAL["sensor_calor_alerta"] = LEITURA_ATUAL["temperatura_c"] > 28
     LEITURA_ATUAL["atualizado_em"] = datetime.now().isoformat()
 
     HISTORICO_SENSORES.append({**LEITURA_ATUAL})
@@ -152,6 +163,7 @@ ALERTAS = [
         "descricao": "srv-backup-01 está fora do ar há 12 minutos",
         "severidade": "alta",
         "canal": "push",
+        "condicao": None,
         "data": (datetime.now() - timedelta(minutes=12)).isoformat(),
         "lido": False,
     },
@@ -161,6 +173,7 @@ ALERTAS = [
         "descricao": "firewall-cpd apresentou 3 quedas de pacote nos últimos 5 minutos",
         "severidade": "media",
         "canal": "email",
+        "condicao": None,
         "data": (datetime.now() - timedelta(hours=1)).isoformat(),
         "lido": False,
     },
@@ -185,7 +198,15 @@ PERFIS_ALERTA = [
     },
 ]
 
+_prox_id_alerta = 3
 _prox_id_perfil_alerta = 3
+
+
+def proximo_id_alerta():
+    global _prox_id_alerta
+    valor = _prox_id_alerta
+    _prox_id_alerta += 1
+    return valor
 
 
 def proximo_id_perfil_alerta():

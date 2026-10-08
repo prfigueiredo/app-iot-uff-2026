@@ -14,9 +14,14 @@ class ApiService {
   static const String baseUrl = 'http://localhost:8000';
   static const String wsUrl = 'ws://localhost:8000';
 
+  // How often screens showing live sensor values poll /sensores/atual.
+  static const Duration intervaloAtualizacaoSensores = Duration(seconds: 5);
+
   static String? _token;
 
   static void definirToken(String? token) => _token = token;
+
+  static String? get token => _token;
 
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
@@ -90,6 +95,11 @@ class ApiService {
     _verificarErro(r);
     final lista = jsonDecode(r.body) as List;
     return lista.map((e) => Alerta.fromJson(e)).toList();
+  }
+
+  static Future<void> marcarAlertaLido(int id) async {
+    final r = await http.post(Uri.parse('$baseUrl/alertas/$id/lido'), headers: _headers);
+    _verificarErro(r);
   }
 
   static Future<List<PerfilAlerta>> listarPerfisAlerta() async {

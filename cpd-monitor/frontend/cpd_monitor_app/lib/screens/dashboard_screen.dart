@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/leitura_sensor.dart';
 import '../models/servico_zabbix.dart';
-import '../models/alerta.dart';
+import '../services/alertas_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/metric_card.dart';
+import '../widgets/severidade.dart';
 import '../widgets/status_dot.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -16,15 +19,32 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   LeituraSensor? _leitura;
   List<ServicoZabbix> _servicos = [];
-  List<Alerta> _alertas = [];
   Map<String, dynamic>? _preferencias;
   bool _carregando = true;
   String? _erro;
+  Timer? _timerSensores;
 
   @override
   void initState() {
     super.initState();
     _carregar();
+    _timerSensores = Timer.periodic(ApiService.intervaloAtualizacaoSensores, (_) => _atualizarLeitura());
+  }
+
+  @override
+  void dispose() {
+    _timerSensores?.cancel();
+    super.dispose();
+  }
+
+  // Refreshes only the sensor reading, without the full-screen spinner.
+  // A failed poll keeps the last value and the next tick tries again.
+  Future<void> _atualizarLeitura() async {
+    if (_carregando || _erro != null) return;
+    try {
+      final leitura = await ApiService.leituraAtual();
+      if (mounted) setState(() => _leitura = leitura);
+    } catch (_) {}
   }
 
   Future<void> _carregar() async {
@@ -36,14 +56,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final resultados = await Future.wait([
         ApiService.leituraAtual(),
         ApiService.statusZabbix(),
-        ApiService.listarAlertas(),
         ApiService.obterPreferenciasDashboard(),
       ]);
       setState(() {
         _leitura = resultados[0] as LeituraSensor;
         _servicos = resultados[1] as List<ServicoZabbix>;
-        _alertas = resultados[2] as List<Alerta>;
-        _preferencias = resultados[3] as Map<String, dynamic>;
+        _preferencias = resultados[2] as Map<String, dynamic>;
         _carregando = false;
       });
     } catch (e) {
@@ -110,7 +128,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final metricas = Set<String>.from(_preferencias?['metricas'] ?? []);
     final servicosFora = _servicos.where((s) => s.status != 'up').length;
-    final alertasNaoLidos = _alertas.where((a) => !a.lido).length;
+    final alertasNaoLidos = context.watch<AlertasProvider>().naoLidos;
 
     return RefreshIndicator(
       onRefresh: _carregar,
@@ -136,13 +154,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (metricas.contains('temperatura'))
                 MetricCard(
                   titulo: 'Temperatura',
-                  valor: '${_leitura!.temperaturaC.toStringAsFixed(1)}°C',
+                  valor: _leitura!.temperaturaC == null ? '-' : '${_leitura!.temperaturaC!.toStringAsFixed(1)}°C',
                   icone: Icons.thermostat,
-                  cor: _leitura!.sensorCalorAlerta ? Colors.red : Colors.teal,
-                  subtitulo: _leitura!.sensorCalorAlerta ? 'Acima do limite' : 'Normal',
+                  cor: corDoNivel(_leitura!.nivel('temperatura'), Colors.teal),
+                  subtitulo: _leitura!.temperaturaAtualizadaEm == null
+                      ? 'Aguardando sensor'
+                      : '${rotuloDoNivel(_leitura!.nivel('temperatura'))} · ${_formatarHora(_leitura!.temperaturaAtualizadaEm!)}',
                 ),
               if (metricas.contains('umidade'))
-                MetricCard(titulo: 'Umidade', valor: '${_leitura!.umidadePct.toStringAsFixed(0)}%', icone: Icons.water_drop, cor: Colors.blue),
+                MetricCard(
+                  titulo: 'Umidade',
+                  valor: _leitura!.umidadePct == null ? '-' : '${_leitura!.umidadePct!.toStringAsFixed(0)}%',
+                  icone: Icons.water_drop,
+                  cor: corDoNivel(_leitura!.nivel('umidade'), Colors.blue),
+                  subtitulo: _leitura!.umidadePct == null ? 'Aguardando sensor' : rotuloDoNivel(_leitura!.nivel('umidade')),
+                ),
               if (metricas.contains('combustivel'))
                 MetricCard(
                   titulo: 'Gerador (combustível)',
@@ -191,6 +217,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  String _formatarHora(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
 }
 
 class _ErroCarregamento extends StatelessWidget {

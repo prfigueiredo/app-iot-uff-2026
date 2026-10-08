@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/leitura_sensor.dart';
 import '../services/api_service.dart';
 import '../widgets/metric_card.dart';
+import '../widgets/severidade.dart';
 
 class SensoresScreen extends StatefulWidget {
   const SensoresScreen({super.key});
@@ -15,11 +17,28 @@ class _SensoresScreenState extends State<SensoresScreen> {
   LeituraSensor? _atual;
   List<LeituraSensor> _historico = [];
   bool _carregando = true;
+  Timer? _timerSensores;
 
   @override
   void initState() {
     super.initState();
     _carregar();
+    _timerSensores = Timer.periodic(ApiService.intervaloAtualizacaoSensores, (_) => _atualizarLeitura());
+  }
+
+  @override
+  void dispose() {
+    _timerSensores?.cancel();
+    super.dispose();
+  }
+
+  // A failed poll keeps the last value, and "Atualizado às" shows its age.
+  Future<void> _atualizarLeitura() async {
+    if (_carregando) return;
+    try {
+      final atual = await ApiService.leituraAtual();
+      if (mounted) setState(() => _atual = atual);
+    } catch (_) {}
   }
 
   Future<void> _carregar() async {
@@ -53,7 +72,15 @@ class _SensoresScreenState extends State<SensoresScreen> {
             mainAxisSpacing: 12,
             childAspectRatio: 1.3,
             children: [
-              MetricCard(titulo: 'Ar-condicionado', valor: _atual!.arCondicionadoStatus ?? '-', icone: Icons.ac_unit, cor: Colors.cyan),
+              MetricCard(
+                titulo: 'Ar-condicionado',
+                valor: _atual!.temperaturaC == null ? '-' : '${_atual!.temperaturaC!.toStringAsFixed(1)}°C',
+                subtitulo: _atual!.temperaturaAtualizadaEm == null
+                    ? 'Aguardando sensor'
+                    : '${_atual!.arCondicionadoStatus ?? '-'} · ${_formatarHora(_atual!.temperaturaAtualizadaEm!)}',
+                icone: Icons.ac_unit,
+                cor: corDoNivel(_atual!.nivel('temperatura'), Colors.cyan),
+              ),
               MetricCard(
                 titulo: 'Sensor de calor',
                 valor: _atual!.sensorCalorAlerta ? 'Alerta' : 'Normal',
@@ -72,17 +99,18 @@ class _SensoresScreenState extends State<SensoresScreen> {
           const SizedBox(height: 24),
           const Text('Temperatura - últimas 24h', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),
-          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.temperaturaC).toList(), cor: Colors.teal)),
+          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.temperaturaC).whereType<double>().toList(), cor: Colors.teal)),
           const SizedBox(height: 24),
           const Text('Umidade - últimas 24h', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),
-          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.umidadePct).toList(), cor: Colors.blue)),
+          SizedBox(height: 200, child: _GraficoLinha(dados: _historico.map((h) => h.umidadePct).whereType<double>().toList(), cor: Colors.blue)),
         ],
       ),
     );
   }
 
-  String _formatarHora(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  String _formatarHora(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
 }
 
 class _GraficoLinha extends StatelessWidget {
