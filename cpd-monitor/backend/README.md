@@ -2,16 +2,25 @@
 
 API em FastAPI para o app de monitoramento do CPD da STI de Niterói-RJ (TCC).
 
-**Este é o app completo e funcional, com todos os dados MOCKADOS (simulados)
-em memória** - não é necessário instalar PostgreSQL nem ter acesso ao
-ambiente real do CPD para testar. Umidade e combustível variam sozinhos a
-cada 15s. A temperatura do ar-condicionado vem do sensor simulado em
-`../sensor_simulado`, que publica leituras em JSON no FIWARE Orion, de onde o
-backend as lê. Alertas
-automáticos disparam quando a temperatura passa de `LIMITE_TEMPERATURA_C`
-(28°C por padrão).
+Não é preciso ter acesso ao ambiente real do CPD para testar. A temperatura
+e a umidade do ar-condicionado vêm do sensor simulado em `../sensor_simulado`,
+que publica leituras em JSON no FIWARE Orion, de onde o backend as lê. O
+combustível do gerador varia sozinho a cada 15s, e os logs (GrayLog) e os
+serviços (Zabbix) continuam simulados em memória. Alertas automáticos disparam
+quando a temperatura passa de `LIMITE_TEMPERATURA_C` (28°C por padrão).
+
+Os alertas e o histórico (uma média por hora de temperatura e umidade) ficam
+num PostgreSQL, que roda no Docker pelo `docker-compose.yml` desta pasta.
 
 ## Como rodar localmente
+
+Suba o PostgreSQL (precisa do Docker Desktop aberto). Ele fica na porta 5433:
+
+```bash
+docker compose up -d
+```
+
+Depois, a API:
 
 ```bash
 python -m venv venv
@@ -20,9 +29,14 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-A API sobe em `http://localhost:8000`. Documentação automática (Swagger) em
-`http://localhost:8000/docs` - dá pra testar todas as rotas por lá, sem
+A API sobe em `http://127.0.0.1:8000`. Documentação automática (Swagger) em
+`http://127.0.0.1:8000/docs` - dá pra testar todas as rotas por lá, sem
 precisar do app Flutter.
+
+Sem o PostgreSQL no ar, a API não sobe e explica o motivo. Para rodar sem
+banco, com o histórico apagado a cada reinício, use `ARMAZENAMENTO=memoria`.
+Para ver médias de 1 minuto em vez de 1 hora numa demonstração, use
+`HISTORICO_INTERVALO_MIN=1`.
 
 ## Sensor do ar-condicionado via FIWARE
 
@@ -51,8 +65,11 @@ pip install -r requirements-dev.txt
 python -m pytest tests
 ```
 
-O teste de integração (`tests/test_integracao_fiware.py`) só roda com o Orion
-no ar. Sem ele, o teste é pulado.
+Os testes de integração com o FIWARE (`tests/test_integracao_fiware.py`) só
+rodam com o Orion no ar, e os testes com o PostgreSQL real
+(`tests/test_repositorio.py`) só rodam com o banco no ar. Sem eles, esses
+testes aparecem como pulados (`skipped`). Os testes com o PostgreSQL usam um
+schema temporário e não tocam nas tabelas de verdade.
 
 ## Usuários de teste (perfis de acesso)
 
@@ -67,7 +84,10 @@ no ar. Sem ele, o teste é pulado.
 - Login com JWT e controle de acesso por perfil (RBAC)
 - Registro de tentativas de acesso indevido (`/seguranca/tentativas-acesso`, só admin)
 - Sensores físicos do CPD: temperatura, umidade, gerador, presença, calor,
-  ar-condicionado (`/sensores/atual`, `/sensores/historico`)
+  ar-condicionado (`/sensores/atual`)
+- Histórico (V3): médias de temperatura e umidade (`/historico/medias`) e
+  alertas anteriores (`/historico/alertas`), guardados no PostgreSQL
+  (`app/persistencia`)
 - Temperatura do ar-condicionado lida do FIWARE Orion (`app/services/fiware.py`)
 - Geração de alertas a partir das leituras (`app/services/alertas.py`), com as
   condições registradas na issue #12 do GitHub
@@ -94,8 +114,9 @@ precisem mudar - o formato de resposta é o mesmo.
 app/
 ├── api/          # rotas (auth, sensores, alertas, integrações, dashboard, segurança)
 ├── core/         # config, segurança (JWT), RBAC, base mockada, WebSocket
-├── models/       # reservado para modelos de banco real (próxima etapa)
+├── models/       # reservado
+├── persistencia/ # alertas e médias: PostgreSQL ou memória
 ├── schemas/      # reservado para schemas adicionais
-├── services/     # integrações externas (FIWARE hoje, GrayLog/Zabbix depois)
-└── main.py       # ponto de entrada + simulador de sensores em background
+├── services/     # FIWARE, regras e geração de alertas, médias do histórico
+└── main.py       # ponto de entrada + laço de monitoramento em background
 ```

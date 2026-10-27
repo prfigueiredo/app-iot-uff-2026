@@ -10,13 +10,16 @@ FIWARE.
 | Versão | Escopo | Situação |
 |---|---|---|
 | V1 | Temperatura do ar-condicionado dinâmica via FIWARE | Concluída |
-| V2 | Alertas a partir dos dados monitorados | Concluída, aguardando validação das condições pelo PO |
-| V3 | Histórico da temperatura e dos alertas | Não iniciada |
+| V2 | Alertas a partir dos dados monitorados | Concluída |
+| V3 | Histórico da temperatura e dos alertas | Concluída |
 
 ## Arquitetura
 
 ```
 sensor simulado ──publica──▶ FIWARE Orion ◀──lê a cada 2s── backend (FastAPI) ──▶ app (Flutter)
+                                                                  │
+                                                                  ▼
+                                                     PostgreSQL (alertas e médias)
 ```
 
 - O **sensor simulado** publica a temperatura do ar-condicionado no Orion.
@@ -25,21 +28,23 @@ sensor simulado ──publica──▶ FIWARE Orion ◀──lê a cada 2s──
 - O **backend** lê a entidade do Orion e entrega ao app em `/sensores/atual`.
   A cada leitura, verifica as condições de alerta e envia os alertas ao app
   em tempo real por WebSocket.
-- O **app** mostra temperatura e umidade, se atualiza sozinho a cada 5s e
-  exibe os alertas assim que são gerados.
+- O **PostgreSQL** guarda os alertas e uma média por hora da temperatura e da
+  umidade (média, mínimo e máximo). O histórico sobrevive ao reinício do
+  backend.
+- O **app** mostra temperatura e umidade, se atualiza sozinho a cada 5s,
+  exibe os alertas assim que são gerados e permite consultar o histórico.
 
 | Pasta | Conteúdo |
 |---|---|
 | [`cpd-monitor/fiware`](cpd-monitor/fiware/README.md) | Orion + MongoDB em Docker |
 | [`cpd-monitor/sensor_simulado`](cpd-monitor/sensor_simulado/ar_condicionado.py) | Sensor simulado do ar-condicionado |
-| [`cpd-monitor/backend`](cpd-monitor/backend/README.md) | API em FastAPI |
+| [`cpd-monitor/backend`](cpd-monitor/backend/README.md) | API em FastAPI e PostgreSQL do histórico em Docker |
 | [`cpd-monitor/frontend/cpd_monitor_app`](cpd-monitor/frontend/cpd_monitor_app/README.md) | App em Flutter |
-| [`docs`](docs) | Plano de projeto, condições de alerta, relatório de testes e roteiro de demonstração da V2 |
 
 ## Pré-requisitos
 
 - Python 3.10 ou mais novo
-- Docker Desktop, para o FIWARE
+- Docker Desktop, para o FIWARE e o PostgreSQL
 - Flutter SDK, para o app ([guia oficial](https://docs.flutter.dev/get-started))
 - Chrome ou Edge, para rodar o app no navegador
 
@@ -48,16 +53,30 @@ sensor simulado ──publica──▶ FIWARE Orion ◀──lê a cada 2s──
 Todos os comandos partem da raiz do repositório. Use um terminal para cada
 parte e deixe todos abertos.
 
-### 1. FIWARE
+### 1. FIWARE e PostgreSQL
 
 Com o Docker Desktop aberto:
 
 ```bash
 docker compose -f cpd-monitor/fiware/docker-compose.yml up -d
+docker compose -f cpd-monitor/backend/docker-compose.yml up -d
 ```
 
 Para conferir, `http://127.0.0.1:1026/version` deve responder com a versão do
-Orion.
+Orion. O PostgreSQL fica na porta **5433**, para não conflitar com um
+PostgreSQL instalado direto no computador, que costuma usar a 5432. Os dois só
+aceitam conexões do próprio computador.
+
+Se a porta 1026 já estiver ocupada (veja "Problemas conhecidos"), suba o Orion
+em outra porta e avise o backend e o sensor:
+
+```bash
+ORION_PORTA=11026 docker compose -f cpd-monitor/fiware/docker-compose.yml up -d
+```
+
+No PowerShell, defina a variável antes: `$env:ORION_PORTA = "11026"`. O
+backend usa `FIWARE_URL=http://127.0.0.1:11026`, e o sensor usa
+`--orion http://127.0.0.1:11026`.
 
 ### 2. Backend
 
@@ -71,8 +90,22 @@ python -m venv venv
 No Linux ou macOS, troque `./venv/Scripts/python` por `./venv/bin/python`.
 
 A API fica em `http://127.0.0.1:8000`, com a documentação interativa em
-`http://127.0.0.1:8000/docs`. Enquanto nenhum sensor publicou, o log mostra
-`FIWARE: aguardando o sensor publicar`.
+`http://127.0.0.1:8000/docs`. O log deve mostrar `Armazenamento: postgres`.
+Enquanto nenhum sensor publicou, ele mostra `FIWARE: aguardando o sensor
+publicar`.
+
+Sem o PostgreSQL no ar, o backend **não sobe** e explica o motivo. Isso é de
+propósito: rodar sem banco perderia o histórico sem avisar. Para rodar sem
+banco (o histórico some ao reiniciar), use `ARMAZENAMENTO=memoria`.
+
+**Para demonstrações**, as médias podem ser de 1 minuto em vez de 1 hora, para
+o histórico aparecer sem esperar:
+
+```bash
+HISTORICO_INTERVALO_MIN=1 ./venv/Scripts/python -m uvicorn app.main:app --port 8000
+```
+
+No PowerShell: `$env:HISTORICO_INTERVALO_MIN = "1"` antes de subir o backend.
 
 ### 3. Sensor simulado
 
@@ -116,11 +149,19 @@ Backend, dentro de `cpd-monitor/backend`:
 ./venv/Scripts/python -m pytest tests
 ```
 
-Os testes de integração (`tests/test_integracao_fiware.py`) cobrem os fluxos
-sensor → FIWARE → backend → app e sensor → FIWARE → alerta → app. Eles só
-rodam com o Orion no ar. Sem o Orion, aparecem como pulados (`skipped`).
+Com o FIWARE e o PostgreSQL no ar, o resultado esperado é **108 passed**.
+Alguns testes dependem desses serviços e aparecem como pulados (`skipped`)
+quando eles estão desligados:
 
-App, dentro de `cpd-monitor/frontend/cpd_monitor_app`:
+- `tests/test_integracao_fiware.py` (2 testes) cobre os fluxos sensor → FIWARE
+  → backend → app e sensor → FIWARE → alerta → app.
+- `tests/test_repositorio.py` roda os mesmos testes de armazenamento duas
+  vezes: na versão em memória e no PostgreSQL real (11 testes). No PostgreSQL,
+  cada execução usa um schema temporário, apagado no final, e nunca toca nas
+  tabelas de verdade.
+
+App, dentro de `cpd-monitor/frontend/cpd_monitor_app` (resultado esperado: 13
+testes):
 
 ```bash
 flutter test
@@ -163,6 +204,19 @@ Os resultados e os defeitos encontrados estão registrados nas issues
 | CT-V2-05 | Pare o sensor por mais de 60s | "Sensor sem comunicação" |
 | CT-V2-06 | Toque num alerta não lido | Alerta fica cinza e o contador do sino diminui |
 
+## Roteiro de testes manuais da V3
+
+Suba o backend com `HISTORICO_INTERVALO_MIN=1` e o sensor com `--alvo 30`.
+
+| # | Ação | Resultado esperado |
+|---|---|---|
+| CT-V3-01 | Espere 2 minutos e abra Sensores → Histórico | Gráfico com a média (linha cheia), o mínimo e o máximo (tracejadas), e a tabela com data, hora, valores e número de leituras de cada período |
+| CT-V3-02 | Troque o período entre 24 h, 7 dias e 30 dias | O gráfico e a tabela mostram só os períodos do intervalo escolhido |
+| CT-V3-03 | Pare o sensor por 3 minutos e ligue de novo | O gráfico mostra uma lacuna, e a tabela não tem registros desses minutos |
+| CT-V3-04 | Abra Alertas → Histórico e use os filtros de período e de condição | Só aparecem os alertas do período e da condição escolhidos |
+| CT-V3-05 | Com a temperatura crítica, reinicie o backend | Os alertas e as médias continuam lá, e nenhum alerta repetido é gerado para o problema que continua |
+| CT-V3-06 | Pare o PostgreSQL (`docker compose -f cpd-monitor/backend/docker-compose.yml stop`) e suba o backend | O backend se recusa a subir e diz onde procurou o banco |
+
 ## Configuração
 
 O backend lê as configurações de **variáveis de ambiente**. O arquivo
@@ -171,6 +225,9 @@ padrão. Ele não é carregado automaticamente.
 
 | Variável | Padrão | Uso |
 |---|---|---|
+| `DATABASE_URL` | `postgresql://cpd_user:cpd_pass@127.0.0.1:5433/cpd_monitor` | Endereço do PostgreSQL |
+| `ARMAZENAMENTO` | `postgres` | `postgres` ou `memoria` (sem banco, o histórico some ao reiniciar) |
+| `HISTORICO_INTERVALO_MIN` | `60` | Minutos de cada média do histórico. Precisa dividir o dia em partes iguais (1, 5, 15, 30, 60...) |
 | `FIWARE_URL` | `http://127.0.0.1:1026` | Endereço do Orion |
 | `FIWARE_ENTIDADE_AR_CONDICIONADO` | `urn:ngsi-ld:ArCondicionado:cpd-01` | Entidade lida pelo backend |
 | `FIWARE_INTERVALO_S` | `2` | Segundos entre leituras do Orion |
@@ -184,6 +241,9 @@ padrão. Ele não é carregado automaticamente.
 
 As condições e os valores estão registrados na issue [#12](https://github.com/prfigueiredo/app-iot-uff-2026/issues/12).
 
+A porta do Orion no computador é definida por `ORION_PORTA` (padrão `1026`),
+lida pelo `docker-compose.yml` do FIWARE, e não pelo backend.
+
 ## Problemas conhecidos
 
 - **Use `127.0.0.1` em vez de `localhost` nos scripts.** No Windows, cada
@@ -191,14 +251,23 @@ As condições e os valores estão registrados na issue [#12](https://github.com
   antes e o servidor só escuta no IPv4. Com `127.0.0.1` levou cerca de 1 ms.
 - **Emulador Android:** o app aponta para `localhost`. No emulador, troque por
   `10.0.2.2` em `lib/services/api_service.dart`.
-- **O Orion não tem autenticação.** Qualquer máquina na rede consegue publicar
-  leituras. O FIWARE resolve isso com componentes próprios de segurança, que
-  estão fora do escopo atual.
+- **O Orion não tem autenticação.** Hoje ele só aceita conexões do próprio
+  computador, mas qualquer programa nele consegue publicar leituras. O FIWARE
+  resolve isso com componentes próprios de segurança, que estão fora do
+  escopo atual ([#19](https://github.com/prfigueiredo/app-iot-uff-2026/issues/19)).
+- **Porta 1026 ocupada no Windows.** O serviço de Filas de Mensagens do
+  Windows (MSMQ, `mqsvc.exe`) pode pegar a porta 1026 ao ligar o computador,
+  e o Orion fica inacessível. Para ver quem usa a porta, rode
+  `netstat -ano | findstr :1026`. Use `ORION_PORTA` (veja "Como rodar") ou,
+  se o MSMQ não for usado, desative-o nos Recursos do Windows.
 - **O app mostra apenas o ar-condicionado `cpd-01`.** Outros sensores já
   conseguem publicar no Orion, mas exibir vários na tela exige mudar o modelo
   de dados.
-- **Alertas em memória.** Os alertas somem ao reiniciar o backend. Guardar o
-  histórico é escopo da V3.
+- **O período em andamento não aparece no histórico.** Cada média é gravada
+  quando o seu período termina. Se o backend parar no meio do período, a média
+  parcial é gravada e mesclada com o restante depois.
+- **Usuários, perfis de alerta e tentativas de acesso indevido continuam em
+  memória** e voltam ao estado inicial quando o backend reinicia.
 - **Estado de "lido" compartilhado.** Quando um usuário marca um alerta como
   lido, ele fica lido para todos.
 - **Arquivos gerados do Flutter.** Rodar `flutter pub get` ou `flutter build`
@@ -216,3 +285,4 @@ request.
 ## Links
 
 - Quadro de atividades: https://github.com/users/prfigueiredo/projects/2
+- Issues: https://github.com/prfigueiredo/app-iot-uff-2026/issues
