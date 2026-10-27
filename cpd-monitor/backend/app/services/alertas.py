@@ -2,11 +2,12 @@
 Alert generation (V2). An alert is created when a condition changes level,
 never once per reading, so a sustained problem produces one alert, not spam.
 """
+import asyncio
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.mock_db import ALERTAS, proximo_id_alerta
 from app.core.ws_manager import ws_manager
+from app.persistencia import obter_repositorio
 from app.services.regras_alerta import (
     AR_DESLIGADO,
     CONDICOES,
@@ -21,9 +22,9 @@ from app.services.regras_alerta import (
 async def registrar_alerta(
     titulo: str, descricao: str, severidade: str, canal: str = "push", condicao: str | None = None
 ) -> dict:
-    """The only way alerts are created: stores the alert and pushes it to the app."""
-    alerta = {
-        "id": proximo_id_alerta(),
+    """The only way alerts are created: stores the alert and pushes it to the app.
+    It is stored first, so the app never shows an alert the history lacks."""
+    novo = {
         "titulo": titulo,
         "descricao": descricao,
         "severidade": severidade,
@@ -32,7 +33,7 @@ async def registrar_alerta(
         "data": datetime.now().isoformat(),
         "lido": False,
     }
-    ALERTAS.insert(0, alerta)
+    alerta = await asyncio.to_thread(obter_repositorio().salvar_alerta, novo)
     await ws_manager.transmitir({"tipo": "novo_alerta", "alerta": alerta})
     return alerta
 
@@ -96,12 +97,26 @@ def estado_para_o_app(niveis: dict[str, Nivel]) -> dict:
     }
 
 
+_NIVEL_DA_SEVERIDADE = {"alta": Nivel.CRITICO, "media": Nivel.ATENCAO, "baixa": Nivel.NORMAL}
+
+
+def niveis_salvos(repositorio) -> dict[str, Nivel]:
+    """The level each condition had when the backend stopped, read from its last
+    stored alert (the inverse of the severities chosen above). Without this, a
+    restart would report an ongoing problem again as if it had just started."""
+    niveis = {}
+    for condicao in CONDICOES:
+        ultimo = repositorio.listar_alertas(condicao=condicao, limite=1)
+        niveis[condicao] = _NIVEL_DA_SEVERIDADE[ultimo[0]["severidade"]] if ultimo else Nivel.NORMAL
+    return niveis
+
+
 class MonitorDeAlertas:
     """Remembers the current level of each condition and alerts on changes."""
 
-    def __init__(self, monitorando_desde: datetime):
+    def __init__(self, monitorando_desde: datetime, niveis: dict[str, Nivel] | None = None):
         self.monitorando_desde = monitorando_desde
-        self.niveis = {condicao: Nivel.NORMAL for condicao in CONDICOES}
+        self.niveis = dict(niveis) if niveis else {condicao: Nivel.NORMAL for condicao in CONDICOES}
 
     async def verificar(self, leitura: dict, agora: datetime) -> list[dict]:
         novos = avaliar(leitura, self.niveis, agora, self.monitorando_desde)

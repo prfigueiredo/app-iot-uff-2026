@@ -4,7 +4,9 @@ services:
   orion:
     image: fiware/orion:4.5.0
     ports:
-      - "1026:1026"
+      # Only this computer can reach Orion (see issue #19). ORION_PORTA changes the
+      # port on the host when another program already uses 1026.
+      - "127.0.0.1:${ORION_PORTA:-1026}:1026"
     depends_on:
       - mongo
     command: -dbURI mongodb://mongo -logLevel WARN

@@ -4,10 +4,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from app.core import mock_db
 from app.core.config import settings
 from app.core.ws_manager import ws_manager
-from app.services.alertas import MonitorDeAlertas, estado_para_o_app
+from app.services.alertas import MonitorDeAlertas, estado_para_o_app, niveis_salvos
 
 INICIO = datetime(2026, 10, 6, 12, 0, 0)
 
@@ -103,15 +102,15 @@ def test_varias_condicoes_ao_mesmo_tempo():
     assert set(titulos(alertas)) == {"Temperatura crítica", "Umidade crítica", "Ar-condicionado desligado"}
 
 
-def test_alerta_gerado_fica_salvo_com_todos_os_campos():
+def test_alerta_gerado_fica_salvo_com_todos_os_campos(repositorio):
     v = Verificador()
     alerta = v.leitura(temperatura=29)[0]
-    assert mock_db.ALERTAS[0] is alerta
+    assert repositorio.listar_alertas() == [alerta]
     assert alerta["condicao"] == "temperatura"
     assert alerta["lido"] is False
     assert alerta["canal"] == "push"
+    assert isinstance(alerta["id"], int)
     datetime.fromisoformat(alerta["data"])
-    assert alerta["id"] not in [a["id"] for a in mock_db.ALERTAS[1:]]
 
 
 def test_alerta_gerado_e_enviado_ao_app_em_tempo_real():
@@ -144,3 +143,25 @@ def test_app_recebe_os_mesmos_niveis_que_geram_os_alertas():
     v.leitura(temperatura=27.0)
     assert estado_para_o_app(v.monitor.niveis)["niveis_alerta"]["temperatura"] == "atencao"
     assert estado_para_o_app(v.monitor.niveis)["sensor_calor_alerta"] is False
+
+
+def test_reinicio_nao_repete_alerta_de_problema_que_continua(repositorio):
+    antes = Verificador()
+    assert titulos(antes.leitura(temperatura=29)) == ["Temperatura crítica"]
+
+    # Backend restarts: a new monitor, levels recovered from the stored alerts.
+    depois = Verificador()
+    depois.monitor = MonitorDeAlertas(monitorando_desde=INICIO, niveis=niveis_salvos(repositorio))
+    assert depois.leitura(temperatura=29.5) == []
+    assert titulos(depois.leitura(temperatura=22)) == ["Temperatura normalizada"]
+
+
+def test_niveis_salvos_seguem_o_ultimo_alerta_de_cada_condicao(repositorio):
+    v = Verificador()
+    v.leitura(temperatura=27)  # attention
+    v.leitura(temperatura=29)  # critical
+    v.leitura(umidade=65)  # humidity attention, temperature back to 22: normalized
+    niveis = niveis_salvos(repositorio)
+    assert niveis["temperatura"].name == "NORMAL"
+    assert niveis["umidade"].name == "ATENCAO"
+    assert niveis["ar_desligado"].name == "NORMAL"  # never alerted

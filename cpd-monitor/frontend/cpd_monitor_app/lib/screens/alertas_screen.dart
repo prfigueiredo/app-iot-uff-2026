@@ -22,7 +22,7 @@ class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _carregarPerfis();
   }
 
@@ -138,6 +138,7 @@ class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProvider
           controller: _tabController,
           tabs: [
             Tab(text: alertas.naoLidos > 0 ? 'Recebidos (${alertas.naoLidos})' : 'Recebidos'),
+            const Tab(text: 'Histórico'),
             const Tab(text: 'Perfis'),
           ],
         ),
@@ -157,6 +158,7 @@ class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProvider
                   aoTocar: () => _marcarComoLido(alertas.alertas[i]),
                 ),
               ),
+              const _HistoricoAlertas(),
               _ListaComEstado(
                 carregando: _carregandoPerfis,
                 erro: _erroPerfis,
@@ -189,8 +191,8 @@ class _AlertasScreenState extends State<AlertasScreen> with SingleTickerProvider
 
 class _CardAlerta extends StatelessWidget {
   final Alerta alerta;
-  final VoidCallback aoTocar;
-  const _CardAlerta({required this.alerta, required this.aoTocar});
+  final VoidCallback? aoTocar; // null in the read-only history
+  const _CardAlerta({required this.alerta, this.aoTocar});
 
   String _formatarData(DateTime d) {
     String dois(int n) => n.toString().padLeft(2, '0');
@@ -219,6 +221,109 @@ class _CardAlerta extends StatelessWidget {
         isThreeLine: true,
         trailing: alerta.lido ? null : Icon(Icons.circle, size: 10, color: cor),
       ),
+    );
+  }
+}
+
+/// Past alerts (V3), read from the backend's history with period and condition filters.
+class _HistoricoAlertas extends StatefulWidget {
+  const _HistoricoAlertas();
+
+  @override
+  State<_HistoricoAlertas> createState() => _HistoricoAlertasState();
+}
+
+class _HistoricoAlertasState extends State<_HistoricoAlertas> {
+  static const _periodos = {1: '24 h', 7: '7 dias', 30: '30 dias'};
+  static const _condicoes = {
+    null: 'Todas as condições',
+    'temperatura': 'Temperatura',
+    'umidade': 'Umidade',
+    'ar_desligado': 'Ar-condicionado desligado',
+    'sem_comunicacao': 'Sensor sem comunicação',
+  };
+
+  int _dias = 7;
+  String? _condicao;
+  List<Alerta> _alertas = [];
+  bool _carregando = true;
+  String? _erro;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregar();
+  }
+
+  Future<void> _carregar() async {
+    setState(() {
+      _carregando = true;
+      _erro = null;
+    });
+    try {
+      final alertas = await ApiService.historicoAlertas(dias: _dias, condicao: _condicao);
+      if (!mounted) return;
+      setState(() => _alertas = alertas);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _erro = e.toString().replaceFirst('Exception: ', ''));
+    }
+    if (mounted) setState(() => _carregando = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final entrada in _periodos.entries)
+                ChoiceChip(
+                  label: Text(entrada.value),
+                  selected: _dias == entrada.key,
+                  onSelected: (_) {
+                    setState(() => _dias = entrada.key);
+                    _carregar();
+                  },
+                ),
+              DropdownButton<String?>(
+                value: _condicao,
+                items: [
+                  for (final entrada in _condicoes.entries) DropdownMenuItem(value: entrada.key, child: Text(entrada.value)),
+                ],
+                onChanged: (valor) {
+                  setState(() => _condicao = valor);
+                  _carregar();
+                },
+              ),
+            ],
+          ),
+        ),
+        if (!_carregando && _erro == null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('${_alertas.length} alerta(s) no período', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            ),
+          ),
+        Expanded(
+          child: _ListaComEstado(
+            carregando: _carregando,
+            erro: _erro,
+            vazia: _alertas.isEmpty,
+            mensagemVazia: 'Nenhum alerta neste período',
+            aoAtualizar: _carregar,
+            itemCount: _alertas.length,
+            itemBuilder: (ctx, i) => _CardAlerta(alerta: _alertas[i]),
+          ),
+        ),
+      ],
     );
   }
 }

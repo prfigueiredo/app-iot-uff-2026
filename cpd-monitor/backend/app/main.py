@@ -11,16 +11,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
+from app import persistencia
 from app.core.config import settings
 from app.core.mock_db import LEITURA_ATUAL, simular_nova_leitura
-from app.api import auth, sensores, alertas, integracoes, dashboard, seguranca
-from app.services.alertas import MonitorDeAlertas, estado_para_o_app
+from app.api import auth, sensores, alertas, historico, integracoes, dashboard, seguranca
+from app.services.alertas import MonitorDeAlertas, estado_para_o_app, niveis_salvos
 from app.services.fiware import sincronizar_ar_condicionado
+from app.services.historico import AgregadorDeMedias
 
 log = logging.getLogger("uvicorn.error")
 
 # asyncio keeps only weak references to tasks, so background loops are held here.
 _tarefas_em_background: set[asyncio.Task] = set()
+
+_agregador = AgregadorDeMedias(settings.HISTORICO_INTERVALO_MIN)
 
 app = FastAPI(
     title="CPD Monitor API",
@@ -39,6 +43,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["autenticação"])
 app.include_router(sensores.router, prefix="/sensores", tags=["sensores físicos"])
 app.include_router(alertas.router, prefix="/alertas", tags=["alertas"])
+app.include_router(historico.router, prefix="/historico", tags=["histórico"])
 app.include_router(integracoes.router, prefix="/integracoes", tags=["graylog/zabbix"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(seguranca.router, prefix="/seguranca", tags=["segurança"])
@@ -60,7 +65,8 @@ async def _loop_monitoramento():
     Conditions are checked even when Orion fails, since that is exactly when
     the sensor stops communicating. Orion problems are logged only on state
     changes, so an outage produces one warning instead of one every poll."""
-    monitor = MonitorDeAlertas(monitorando_desde=datetime.now())
+    niveis = await asyncio.to_thread(niveis_salvos, persistencia.obter_repositorio())
+    monitor = MonitorDeAlertas(monitorando_desde=datetime.now(), niveis=niveis)
     estado_anterior = None
     async with httpx.AsyncClient(base_url=settings.FIWARE_URL, timeout=5) as client:
         while True:
@@ -86,7 +92,26 @@ async def _loop_monitoramento():
                 # A bug in one check must not silently stop all monitoring.
                 log.exception("Falha ao verificar as condições de alerta")
 
+            try:
+                await _atualizar_historico(estado == "ok")
+            except Exception:
+                log.exception("Falha ao gravar o histórico de médias")
+
             await asyncio.sleep(settings.FIWARE_INTERVALO_S)
+
+
+async def _atualizar_historico(leitura_recebida: bool):
+    """Feeds the current reading to the averages and stores every closed period."""
+    fechados = []
+    medido_em = LEITURA_ATUAL["temperatura_atualizada_em"]
+    if leitura_recebida and medido_em:
+        fechados += _agregador.adicionar(
+            datetime.fromisoformat(medido_em), LEITURA_ATUAL["temperatura_c"], LEITURA_ATUAL["umidade_pct"]
+        )
+    fechados += _agregador.fechar_vencidos(datetime.now())
+    for media in fechados:
+        await asyncio.to_thread(persistencia.obter_repositorio().salvar_media, media)
+        log.info("Média gravada: %s, %d leituras", media.inicio.strftime("%d/%m %H:%M"), media.amostras)
 
 
 def _iniciar_em_background(corrotina):
@@ -97,6 +122,23 @@ def _iniciar_em_background(corrotina):
 
 @app.on_event("startup")
 async def iniciar_tarefas_em_background():
+    # Without the database the history would be silently lost, so the backend
+    # refuses to start instead. The tests configure their own storage first.
+    if not persistencia.configurado():
+        persistencia.configurar(await asyncio.to_thread(persistencia.criar_repositorio))
+        log.info("Armazenamento: %s", settings.ARMAZENAMENTO)
     _iniciar_em_background(_loop_monitoramento())
     if settings.MODO_SIMULACAO:
         _iniciar_em_background(_loop_simulacao_sensores())
+
+
+@app.on_event("shutdown")
+async def encerrar():
+    if not persistencia.configurado():
+        return  # startup failed before connecting, so there is nothing to save
+    # The partial average of the current period is stored now and merged with
+    # the rest of the period after the next start.
+    repositorio = persistencia.obter_repositorio()
+    for media in _agregador.esvaziar():
+        await asyncio.to_thread(repositorio.salvar_media, media)
+    await asyncio.to_thread(repositorio.fechar)

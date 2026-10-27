@@ -2,7 +2,7 @@
 Alert conditions (V2), as pure functions: reading + previous levels in,
 new levels out. No I/O here, which keeps every rule easy to test.
 
-Conditions are documented in docs/v2-condicoes-de-alerta.md.
+The conditions and their values are recorded in GitHub issue #12.
 """
 from datetime import datetime
 from enum import IntEnum

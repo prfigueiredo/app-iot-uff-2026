@@ -1,12 +1,7 @@
 """
-Base de dados MOCKADA em memória.
-
-Enquanto não há acesso real ao ambiente do CPD (GrayLog, Zabbix, sensores),
-todo o estado da aplicação vive aqui em estruturas Python simples. Isso deixa
-o app 100% testável sem exigir instalação de PostgreSQL ou acesso à rede do
-CPD. Quando o acesso real estiver disponível, esse módulo é substituído por
-uma camada real de banco de dados sem que as rotas precisem mudar de formato
-de resposta.
+In-memory state that has no real source yet: users, the current sensor
+reading, and the GrayLog and Zabbix mocks. The history (alerts and periodic
+averages) lives in app/persistencia, backed by PostgreSQL.
 """
 import random
 from datetime import datetime, timedelta
@@ -67,27 +62,6 @@ LEITURA_ATUAL = {
     "atualizado_em": datetime.now().isoformat(),
 }
 
-HISTORICO_SENSORES = []
-
-
-def _seed_historico_sensores():
-    agora = datetime.now()
-    for i in range(48, 0, -1):
-        momento = agora - timedelta(minutes=30 * i)
-        HISTORICO_SENSORES.append(
-            {
-                "temperatura_c": round(20 + random.uniform(-1.5, 3.5), 1),
-                "umidade_pct": round(45 + random.uniform(-5, 10), 1),
-                "combustivel_gerador_pct": round(82 + random.uniform(-0.5, 0.5), 1),
-                "pessoas_presentes": random.choice([0, 0, 0, 1, 1, 2]),
-                "atualizado_em": momento.isoformat(),
-            }
-        )
-
-
-_seed_historico_sensores()
-
-
 def registrar_leitura_ar_condicionado(
     temperatura_c: float, status: str, medido_em: datetime, umidade_pct: float | None = None
 ) -> dict:
@@ -107,11 +81,6 @@ def simular_nova_leitura():
         max(0, LEITURA_ATUAL["combustivel_gerador_pct"] - random.uniform(0, 0.05)), 1
     )
     LEITURA_ATUAL["atualizado_em"] = datetime.now().isoformat()
-
-    HISTORICO_SENSORES.append({**LEITURA_ATUAL})
-    if len(HISTORICO_SENSORES) > 200:
-        HISTORICO_SENSORES.pop(0)
-
     return LEITURA_ATUAL
 
 
@@ -154,31 +123,8 @@ SERVICOS_ZABBIX = [
 ]
 
 # ---------------------------------------------------------------------------
-# Alertas e perfis de alerta personalizados
+# Perfis de alerta personalizados
 # ---------------------------------------------------------------------------
-ALERTAS = [
-    {
-        "id": 1,
-        "titulo": "Backup falhou",
-        "descricao": "srv-backup-01 está fora do ar há 12 minutos",
-        "severidade": "alta",
-        "canal": "push",
-        "condicao": None,
-        "data": (datetime.now() - timedelta(minutes=12)).isoformat(),
-        "lido": False,
-    },
-    {
-        "id": 2,
-        "titulo": "Firewall com instabilidade",
-        "descricao": "firewall-cpd apresentou 3 quedas de pacote nos últimos 5 minutos",
-        "severidade": "media",
-        "canal": "email",
-        "condicao": None,
-        "data": (datetime.now() - timedelta(hours=1)).isoformat(),
-        "lido": False,
-    },
-]
-
 PERFIS_ALERTA = [
     {
         "id": 1,
@@ -198,15 +144,7 @@ PERFIS_ALERTA = [
     },
 ]
 
-_prox_id_alerta = 3
 _prox_id_perfil_alerta = 3
-
-
-def proximo_id_alerta():
-    global _prox_id_alerta
-    valor = _prox_id_alerta
-    _prox_id_alerta += 1
-    return valor
 
 
 def proximo_id_perfil_alerta():

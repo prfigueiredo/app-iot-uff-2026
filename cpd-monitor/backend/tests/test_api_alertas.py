@@ -46,7 +46,7 @@ def test_visualizador_nao_simula_alerta(client):
 
 
 def test_marcar_alerta_como_lido(client, admin):
-    alerta_id = mock_db.ALERTAS[0]["id"]
+    alerta_id = client.post("/alertas/simular", json=ALERTA, headers=admin).json()["id"]
     r = client.post(f"/alertas/{alerta_id}/lido", headers=admin)
     assert r.status_code == 200
     assert r.json()["lido"] is True
@@ -55,6 +55,12 @@ def test_marcar_alerta_como_lido(client, admin):
 
 def test_marcar_alerta_inexistente(client, admin):
     assert client.post("/alertas/999999/lido", headers=admin).status_code == 404
+
+
+def test_rota_antiga_do_sensor_direto_nao_existe(client):
+    # The sensor publishes only to FIWARE. This route was a leftover from an
+    # earlier version and answered with an error 500.
+    assert client.post("/sensores/ar-condicionado", json={"temperatura_c": 40}).status_code in (404, 405)
 
 
 @pytest.mark.parametrize("primeira_mensagem", [{"token": "invalido"}, {"outra": "coisa"}, "nao-e-json"])

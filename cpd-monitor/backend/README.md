@@ -70,7 +70,7 @@ no ar. Sem ele, o teste é pulado.
   ar-condicionado (`/sensores/atual`, `/sensores/historico`)
 - Temperatura do ar-condicionado lida do FIWARE Orion (`app/services/fiware.py`)
 - Geração de alertas a partir das leituras (`app/services/alertas.py`), com as
-  condições descritas em `../../docs/v2-condicoes-de-alerta.md`
+  condições registradas na issue #12 do GitHub
 - Logs simulando o GrayLog (`/integracoes/graylog/logs`, com filtro por nível)
 - Status de serviços simulando o Zabbix (`/integracoes/zabbix/status`)
 - Alertas com perfis personalizados (`/alertas`, `/alertas/perfis`),

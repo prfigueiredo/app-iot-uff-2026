@@ -8,28 +8,33 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from pydantic import BaseModel, Field
 
 from app.core.deps import get_usuario_atual, exigir_perfil
-from app.core.mock_db import ALERTAS, PERFIS_ALERTA, proximo_id_perfil_alerta, registrar_tentativa_indevida
+from app.core.mock_db import PERFIS_ALERTA, proximo_id_perfil_alerta, registrar_tentativa_indevida
 from app.core.security import decodificar_token
 from app.core.ws_manager import ws_manager
+from app.persistencia import obter_repositorio
+from app.persistencia.repositorio import Repositorio
 from app.services.alertas import registrar_alerta
 
 router = APIRouter()
 
 TEMPO_PARA_AUTENTICAR_S = 5
+ALERTAS_RECENTES = 100
 
 
 @router.get("")
-def listar_alertas(usuario: dict = Depends(get_usuario_atual)):
-    return ALERTAS
+def listar_alertas(usuario: dict = Depends(get_usuario_atual), repositorio: Repositorio = Depends(obter_repositorio)):
+    """Os alertas mais recentes. Para consultar períodos anteriores, use /historico/alertas."""
+    return repositorio.listar_alertas(limite=ALERTAS_RECENTES)
 
 
 @router.post("/{alerta_id}/lido")
-def marcar_alerta_lido(alerta_id: int, usuario: dict = Depends(get_usuario_atual)):
+def marcar_alerta_lido(
+    alerta_id: int, usuario: dict = Depends(get_usuario_atual), repositorio: Repositorio = Depends(obter_repositorio)
+):
     """Marca um alerta como lido (o estado de leitura é compartilhado entre usuários)."""
-    alerta = next((a for a in ALERTAS if a["id"] == alerta_id), None)
+    alerta = repositorio.marcar_lido(alerta_id)
     if alerta is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alerta não encontrado")
-    alerta["lido"] = True
     return alerta
 
 

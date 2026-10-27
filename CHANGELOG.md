@@ -10,8 +10,7 @@ Branch `feature/v2-alertas`.
 
 - Geração de alertas a partir das leituras do FIWARE, com quatro condições:
   temperatura alta, umidade alta (possível vazamento), ar-condicionado
-  desligado e sensor sem comunicação. Ver
-  [`docs/v2-condicoes-de-alerta.md`](docs/v2-condicoes-de-alerta.md).
+  desligado e sensor sem comunicação. Ver a issue [#12](https://github.com/prfigueiredo/app-iot-uff-2026/issues/12).
 - Um alerta por mudança de nível, com histerese e aviso de normalização.
 - Umidade publicada pelo sensor do ar-condicionado no FIWARE.
 - Opções `--umidade-alvo` e `--status` no sensor simulado.
@@ -19,7 +18,7 @@ Branch `feature/v2-alertas`.
 - No app: contador de não lidos no menu, lista de alertas atualizada em tempo
   real, data e hora de cada alerta, cores por nível nos cards de temperatura e
   umidade.
-- Relatório de testes em [`docs/v2-relatorio-de-testes.md`](docs/v2-relatorio-de-testes.md).
+- Testes e defeitos registrados nas issues [#15](https://github.com/prfigueiredo/app-iot-uff-2026/issues/15) e [#16](https://github.com/prfigueiredo/app-iot-uff-2026/issues/16).
 
 ### Corrigido
 

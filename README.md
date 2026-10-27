@@ -151,8 +151,8 @@ docker compose -f cpd-monitor/fiware/docker-compose.yml up -d
 
 ## Roteiro de testes manuais da V2
 
-O roteiro completo, com os resultados da última execução, está em
-[`docs/v2-relatorio-de-testes.md`](docs/v2-relatorio-de-testes.md). Resumo:
+Os resultados e os defeitos encontrados estão registrados nas issues
+[#15](https://github.com/prfigueiredo/app-iot-uff-2026/issues/15) e [#16](https://github.com/prfigueiredo/app-iot-uff-2026/issues/16). Resumo:
 
 | # | Ação | Resultado esperado |
 |---|---|---|
@@ -182,8 +182,7 @@ padrão. Ele não é carregado automaticamente.
 | `HISTERESE_UMIDADE_PCT` | `2` | Quanto abaixo do limite a umidade volta ao normal |
 | `SENSOR_SEM_COMUNICACAO_S` | `60` | Segundos sem leitura até o alerta de sensor sem comunicação |
 
-O motivo de cada valor está em
-[`docs/v2-condicoes-de-alerta.md`](docs/v2-condicoes-de-alerta.md).
+As condições e os valores estão registrados na issue [#12](https://github.com/prfigueiredo/app-iot-uff-2026/issues/12).
 
 ## Problemas conhecidos
 
