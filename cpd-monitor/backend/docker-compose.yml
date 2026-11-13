@@ -1,0 +1,17 @@
+# PostgreSQL for the backend's history (V3): hourly averages and alerts.
+# Port 5433 avoids clashing with a PostgreSQL installed directly on the machine,
+# and 127.0.0.1 keeps the database reachable only from this computer.
+services:
+  postgres:
+    image: postgres:18
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_USER: cpd_user
+      POSTGRES_PASSWORD: cpd_pass
+      POSTGRES_DB: cpd_monitor
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+volumes:
+  postgres-data:

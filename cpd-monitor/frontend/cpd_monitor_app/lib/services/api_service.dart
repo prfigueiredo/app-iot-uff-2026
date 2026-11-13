@@ -6,6 +6,7 @@ import '../models/leitura_sensor.dart';
 import '../models/log_entrada.dart';
 import '../models/servico_zabbix.dart';
 import '../models/alerta.dart';
+import '../models/media_historico.dart';
 import '../models/usuario.dart';
 
 class ApiService {
@@ -66,11 +67,18 @@ class ApiService {
     return LeituraSensor.fromJson(jsonDecode(r.body));
   }
 
-  static Future<List<LeituraSensor>> historicoSensores({int limite = 48}) async {
-    final r = await http.get(Uri.parse('$baseUrl/sensores/historico?limite=$limite'), headers: _headers);
+  static Future<HistoricoMedias> historicoMedias({int horas = 24}) async {
+    final r = await http.get(Uri.parse('$baseUrl/historico/medias?horas=$horas'), headers: _headers);
     _verificarErro(r);
-    final lista = jsonDecode(r.body) as List;
-    return lista.map((e) => LeituraSensor.fromJson(e)).toList();
+    return HistoricoMedias.fromJson(jsonDecode(r.body));
+  }
+
+  static Future<List<Alerta>> historicoAlertas({int dias = 7, String? condicao}) async {
+    final query = condicao == null ? 'dias=$dias' : 'dias=$dias&condicao=$condicao';
+    final r = await http.get(Uri.parse('$baseUrl/historico/alertas?$query'), headers: _headers);
+    _verificarErro(r);
+    final lista = jsonDecode(r.body)['alertas'] as List;
+    return lista.map((e) => Alerta.fromJson(e)).toList();
   }
 
   static Future<List<LogEntrada>> logsGraylog({String? nivel}) async {

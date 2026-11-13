@@ -6,11 +6,18 @@ import os
 
 
 class Settings:
-    # Banco de dados (PostgreSQL)
+    # Banco de dados (PostgreSQL), started with docker-compose.yml in this folder.
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://cpd_user:cpd_pass@localhost:5432/cpd_monitor",
+        "postgresql://cpd_user:cpd_pass@127.0.0.1:5433/cpd_monitor",
     )
+    # "postgres" keeps alerts and history across restarts. "memoria" runs without
+    # a database (tests and quick experiments) and loses everything on restart.
+    ARMAZENAMENTO: str = os.getenv("ARMAZENAMENTO", "postgres")
+
+    # Length of each stored average, in minutes. 60 = one average per hour. A short
+    # value such as 1 makes the history visible during a demonstration.
+    HISTORICO_INTERVALO_MIN: int = int(os.getenv("HISTORICO_INTERVALO_MIN", "60"))
 
     # Segurança / JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY", "troque-esta-chave-em-producao")
@@ -29,8 +36,7 @@ class Settings:
     )
     FIWARE_INTERVALO_S: float = float(os.getenv("FIWARE_INTERVALO_S", "2"))
 
-    # Alert conditions (V2), documented in docs/v2-condicoes-de-alerta.md.
-    # The critical temperature level also sets sensor_calor_alerta.
+    # Alert conditions (V2). The critical temperature level also sets sensor_calor_alerta.
     TEMPERATURA_ATENCAO_C: float = float(os.getenv("TEMPERATURA_ATENCAO_C", "26"))
     LIMITE_TEMPERATURA_C: float = float(os.getenv("LIMITE_TEMPERATURA_C", "28"))
     HISTERESE_TEMPERATURA_C: float = float(os.getenv("HISTERESE_TEMPERATURA_C", "0.5"))
